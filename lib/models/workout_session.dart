@@ -16,10 +16,6 @@ class WorkoutSession {
     this.color,
   }) : exerciseRefs = exerciseRefs ?? [];
 
-  // Legacy support: keep exercises property for backwards compatibility
-  @Deprecated('Use exerciseRefs instead')
-  List<Exercise> get exercises => [];
-
   WorkoutSession copyWith({
     String? id,
     String? name,

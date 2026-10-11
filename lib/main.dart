@@ -1,30 +1,31 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:provider/provider.dart';
 
-import 'theme/theme.dart';
-import 'services/services.dart';
 import 'providers/providers.dart';
 import 'screens/screens.dart';
+import 'services/services.dart';
+import 'theme/theme.dart';
 
-void main() async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // Initialize storage
+
+  // Stockage local (Hive) : doit être prêt avant le premier écran.
   await StorageService().init();
-  
-  // Initialize French locale for dates
+
+  // Noms des jours et des mois en français.
   await initializeDateFormatting('fr_FR', null);
-  
-  // Set system UI style
+
+  // Barres système claires, assorties au fond « craie ».
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
-    statusBarIconBrightness: Brightness.light,
+    statusBarIconBrightness: Brightness.dark,
+    statusBarBrightness: Brightness.light,
     systemNavigationBarColor: AppColors.surface,
-    systemNavigationBarIconBrightness: Brightness.light,
+    systemNavigationBarIconBrightness: Brightness.dark,
   ));
-  
+
   runApp(const AppNuno());
 }
 
@@ -36,22 +37,14 @@ class AppNuno extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => WorkoutProvider()..loadAll()),
-        // Restaure une éventuelle séance interrompue (application fermée en cours d'entraînement)
+        // Restaure une éventuelle séance interrompue (application fermée en cours d'entraînement).
         ChangeNotifierProvider(create: (_) => ActiveWorkoutProvider()..restoreActiveWorkout()),
       ],
-      child: Container(
-        decoration: const BoxDecoration(
-          image: DecorationImage(
-            image: AssetImage('assets/images/salle.png'),
-            fit: BoxFit.cover,
-          ),
-        ),
-        child: MaterialApp(
-          title: 'AppNuno',
-          debugShowCheckedModeBanner: false,
-          theme: AppTheme.darkTheme,
-          home: const HomeScreen(),
-        ),
+      child: MaterialApp(
+        title: 'AppNuno',
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.light,
+        home: const HomeScreen(),
       ),
     );
   }

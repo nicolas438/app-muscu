@@ -1,17 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
-import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
-import '../../theme/app_theme.dart';
-import '../../providers/providers.dart';
+import 'package:provider/provider.dart';
 import '../../models/models.dart';
+import '../../providers/providers.dart';
+import '../../theme/app_theme.dart';
+import '../../utils/format.dart';
 import '../../widgets/widgets.dart';
-import '../sessions/sessions_screen.dart';
-import '../schedule/schedule_screen.dart';
 import '../analytics/analytics_screen.dart';
-import '../workout/active_workout_screen.dart';
+import '../schedule/schedule_screen.dart';
+import '../sessions/sessions_screen.dart';
+import '../workout/start_workout.dart';
 import '../workout/workout_detail_screen.dart';
 
+/// Écran racine : navigation entre Accueil, Séances, Planning et Stats.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -29,26 +31,29 @@ class _HomeScreenState extends State<HomeScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _offerToResumeWorkout());
   }
 
-  /// Affiche une proposition de reprise si une séance était en cours
-  /// lors de la dernière fermeture de l'application.
+  /// Propose de reprendre la séance laissée en cours lors de la dernière
+  /// fermeture de l'application.
   Future<void> _offerToResumeWorkout() async {
     final activeProvider = context.read<ActiveWorkoutProvider>();
     if (!activeProvider.hasActiveWorkout) return;
 
-    final sessionName = activeProvider.currentWorkout!.sessionName;
+    final workout = activeProvider.currentWorkout!;
     final resume = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
-        title: const Text('Séance en cours'),
-        content: Text('Ta séance « $sessionName » n\'a pas été terminée. Veux-tu la reprendre ?'),
+        title: const Text('Reprendre ta séance ?'),
+        content: Text(
+          '« ${workout.sessionName} » n\'a pas été terminée. '
+          '${plural(workout.totalSets, 'série')} déjà ${workout.totalSets > 1 ? 'enregistrées' : 'enregistrée'}.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
             style: TextButton.styleFrom(foregroundColor: AppColors.error),
             child: const Text('Abandonner'),
           ),
-          ElevatedButton(
+          FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Reprendre'),
           ),
@@ -58,908 +63,545 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (!mounted) return;
     if (resume == true) {
-      Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const ActiveWorkoutScreen()),
-      );
+      openActiveWorkout(context);
     } else {
       activeProvider.cancelWorkout();
     }
   }
+
+  void _selectTab(int index) => setState(() => _currentIndex = index);
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: IndexedStack(
         index: _currentIndex,
-        children: const [
-          _HomeTab(),
-          SessionsScreen(),
-          ScheduleScreen(),
-          AnalyticsScreen(),
+        children: [
+          _TodayTab(onOpenSessions: () => _selectTab(1)),
+          const SessionsScreen(),
+          const ScheduleScreen(),
+          const AnalyticsScreen(),
         ],
       ),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.2),
-              blurRadius: 10,
-              offset: const Offset(0, -2),
-            ),
+      bottomNavigationBar: DecoratedBox(
+        decoration: const BoxDecoration(
+          border: Border(top: BorderSide(color: AppColors.line)),
+        ),
+        child: NavigationBar(
+          selectedIndex: _currentIndex,
+          onDestinationSelected: _selectTab,
+          destinations: const [
+            NavigationDestination(icon: Icon(LucideIcons.house), label: 'Accueil'),
+            NavigationDestination(icon: Icon(LucideIcons.dumbbell), label: 'Séances'),
+            NavigationDestination(icon: Icon(LucideIcons.calendar), label: 'Planning'),
+            NavigationDestination(icon: Icon(LucideIcons.chart_line), label: 'Stats'),
           ],
         ),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _NavItem(
-                  icon: LucideIcons.house,
-                  label: 'Accueil',
-                  isSelected: _currentIndex == 0,
-                  onTap: () => setState(() => _currentIndex = 0),
-                ),
-                _NavItem(
-                  icon: LucideIcons.dumbbell,
-                  label: 'Séances',
-                  isSelected: _currentIndex == 1,
-                  onTap: () => setState(() => _currentIndex = 1),
-                ),
-                _NavItem(
-                  icon: LucideIcons.calendar,
-                  label: 'Planning',
-                  isSelected: _currentIndex == 2,
-                  onTap: () => setState(() => _currentIndex = 2),
-                ),
-                _NavItem(
-                  icon: LucideIcons.chart_line,
-                  label: 'Stats',
-                  isSelected: _currentIndex == 3,
-                  onTap: () => setState(() => _currentIndex = 3),
-                ),
-              ],
-            ),
-          ),
-        ),
       ),
     );
   }
 }
 
-class _NavItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool isSelected;
-  final VoidCallback onTap;
+// =============================================================================
+// ONGLET ACCUEIL
+// =============================================================================
 
-  const _NavItem({
-    required this.icon,
-    required this.label,
-    required this.isSelected,
-    required this.onTap,
-  });
+class _TodayTab extends StatelessWidget {
+  final VoidCallback onOpenSessions;
+
+  const _TodayTab({required this.onOpenSessions});
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+    final provider = context.watch<WorkoutProvider>();
+    final activeProvider = context.watch<ActiveWorkoutProvider>();
+    final today = DateFormat('EEEE d MMMM', 'fr_FR').format(DateTime.now());
+    final recent = provider.getRecentWorkouts();
+
+    return SafeArea(
+      bottom: false,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(AppSpace.page, AppSpace.l, AppSpace.page, AppSpace.xxl),
         children: [
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  icon,
-                  color: isSelected ? AppColors.warning : AppColors.textTertiary,
-                  size: 24,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: isSelected ? AppColors.warning : AppColors.textTertiary,
-                    fontSize: 12,
-                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // Glowing underline
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            height: 3,
-            width: isSelected ? 40 : 0,
-            decoration: BoxDecoration(
-              color: AppColors.warning,
-              borderRadius: BorderRadius.circular(2),
-              boxShadow: isSelected
-                  ? [
-                      BoxShadow(
-                        color: AppColors.warning.withValues(alpha: 0.6),
-                        blurRadius: 8,
-                        spreadRadius: 2,
-                      ),
-                    ]
-                  : [],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _HomeTab extends StatelessWidget {
-  const _HomeTab();
-
-  @override
-  Widget build(BuildContext context) {
-    return Consumer<WorkoutProvider>(
-      builder: (context, provider, _) {
-        final todaySession = provider.getTodaySession();
-        final lastSameTypeWorkout = provider.getLastWorkoutOfTodayType();
-
-        return SafeArea(
-          child: CustomScrollView(
-            slivers: [
-              SliverToBoxAdapter(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Header style Baki
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _getGreeting(),
-                                style: const TextStyle(
-                                  color: AppColors.textSecondary,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: 1,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              const Text(
-                                'PRÊT AU COMBAT ?',
-                                style: TextStyle(
-                                  color: AppColors.textPrimary,
-                                  fontSize: 26,
-                                  fontWeight: FontWeight.w900,
-                                  letterSpacing: 1.5,
-                                ),
-                              ),
-                            ],
-                          ),
-                          Image.asset(
-                            'assets/images/app_icon.png',
-                            width: 48,
-                            height: 48,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Today's Session Card with Baki Banner
-                    _TodaySessionCard(session: todaySession),
-
-                    const SizedBox(height: 24),
-                    
-                    // Wrapper with padding for remaining content
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Quick Stats
-                          _QuickStats(
-                            workouts: provider.completedWorkouts,
-                            currentStreak: provider.streak.currentStreak,
-                          ),
-
-                          const SizedBox(height: 20),
-
-                          // Streak/Flame Section
-                          _StreakSection(
-                            streak: provider.streak,
-                            workoutsThisWeek: provider.workoutsThisWeek,
-                            totalWorkouts: provider.totalCompletedWorkouts,
-                            onUpdateGoal: (goal) => provider.updateWeeklyGoal(goal),
-                          ),
-
-                          const SizedBox(height: 24),
-
-                          // Last workout of same type as today
-                          if (lastSameTypeWorkout != null && todaySession != null) ...[
-                            Text(
-                              'DERNIÈRE SÉANCE ${todaySession.name.toUpperCase()}',
-                              style: const TextStyle(
-                                color: AppColors.textPrimary,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 1.5,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            _RecentWorkoutCard(workout: lastSameTypeWorkout),
-                          ] else if (provider.completedWorkouts.isEmpty)
-                            EmptyState(
-                              icon: LucideIcons.dumbbell,
-                              title: 'PAS ENCORE DE SÉANCE TERMINÉE',
-                              subtitle: 'Lance ta première séance pour devenir plus fort !',
-                            ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  String _getGreeting() {
-    final hour = DateTime.now().hour;
-    if (hour < 12) return 'MATIN DE GUERRIER 👊';
-    if (hour < 18) return 'APRÈS-MIDI DE COMBAT 💪';
-    return 'SOIRÉE DE CHAMPION 🔥';
-  }
-}
-
-class _TodaySessionCard extends StatelessWidget {
-  final WorkoutSession? session;
-
-  const _TodaySessionCard({this.session});
-
-  @override
-  Widget build(BuildContext context) {
-    final dayName = WeeklySchedule.getDayName(DateTime.now().weekday);
-
-    if (session == null) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        child: GradientCard(
-          backgroundColor: AppColors.surfaceLight,
-          padding: const EdgeInsets.all(20),
-          child: Row(
+          // En-tête : date du jour et série de semaines en cours.
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppColors.textTertiary.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: AppColors.textTertiary.withValues(alpha: 0.3)),
-                ),
-                child: const Icon(
-                  LucideIcons.moon,
-                  color: AppColors.textTertiary,
-                  size: 28,
-                ),
-              ),
-              const SizedBox(width: 16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      dayName.toUpperCase(),
-                      style: const TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 1,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'RÉCUPÉRATION',
-                      style: TextStyle(
-                        color: AppColors.textPrimary,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 1,
-                      ),
-                    ),
+                    Text(capitalize(today), style: AppText.label),
+                    const SizedBox(height: AppSpace.xs),
+                    const Text('Aujourd\'hui', style: AppText.display),
                   ],
                 ),
               ),
+              _StreakBadge(streak: provider.streak.currentStreak),
             ],
           ),
-        ),
-      );
-    }
+          const SizedBox(height: AppSpace.xl),
 
-    // Banner Baki pour la séance du jour (match other cards padding)
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: BakiBanner(
-        sessionName: session!.name,
-        subtitle: '${session!.exerciseRefs.length} exercices • Tape pour commencer',
-        bannerIndex: session!.name.hashCode,
-        onTap: () => _startWorkout(context, session!),
-      ),
-    );
-  }
-
-  Future<void> _startWorkout(BuildContext context, WorkoutSession session) async {
-    final activeProvider = context.read<ActiveWorkoutProvider>();
-    final workoutProvider = context.read<WorkoutProvider>();
-    final navigator = Navigator.of(context);
-
-    // Une séance est déjà en cours : on évite de l'écraser sans confirmation.
-    if (activeProvider.hasActiveWorkout) {
-      final runningName = activeProvider.currentWorkout!.sessionName;
-      final startNew = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Séance déjà en cours'),
-          content: Text(
-            'La séance « $runningName » n\'est pas terminée. '
-            'Démarrer « ${session.name} » l\'abandonnera sans la sauvegarder.',
+          _TodayCard(
+            session: provider.getTodaySession(),
+            activeWorkout: activeProvider.hasActiveWorkout ? activeProvider.currentWorkout : null,
+            lastWorkout: provider.getTodaySession() == null
+                ? null
+                : provider.getLastWorkoutOfSession(provider.getTodaySession()!),
+            onOpenSessions: onOpenSessions,
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              style: TextButton.styleFrom(foregroundColor: AppColors.error),
-              child: const Text('Démarrer la nouvelle'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Reprendre l\'actuelle'),
-            ),
-          ],
-        ),
-      );
+          const SizedBox(height: AppSpace.l),
 
-      // Fenêtre fermée sans choix : on ne fait rien.
-      if (startNew == null) return;
-      if (startNew) activeProvider.startWorkout(session, workoutProvider);
-    } else {
-      activeProvider.startWorkout(session, workoutProvider);
-    }
+          _WeekPanel(provider: provider),
+          const SizedBox(height: AppSpace.xxl),
 
-    navigator.push(
-      MaterialPageRoute(
-        builder: (_) => const ActiveWorkoutScreen(),
+          const SectionTitle('Historique'),
+          if (recent.isEmpty)
+            Text(
+              'Tes séances terminées apparaîtront ici.',
+              style: AppText.body.copyWith(color: AppColors.inkSoft),
+            )
+          else
+            Panel(
+              padding: EdgeInsets.zero,
+              child: Column(
+                children: [
+                  for (var i = 0; i < recent.length; i++) ...[
+                    if (i > 0) const Divider(indent: AppSpace.l, endIndent: AppSpace.l),
+                    _HistoryRow(workout: recent[i]),
+                  ],
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }
 }
 
-class _QuickStats extends StatelessWidget {
-  final List<CompletedWorkout> workouts;
-  final int currentStreak;
+/// Pastille indiquant le nombre de semaines d'affilée où l'objectif est tenu.
+class _StreakBadge extends StatelessWidget {
+  final int streak;
 
-  const _QuickStats({required this.workouts, required this.currentStreak});
+  const _StreakBadge({required this.streak});
 
   @override
   Widget build(BuildContext context) {
-    // Stats for this week
-    final now = DateTime.now();
-    final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
-    final weekWorkouts = workouts.where((w) => w.date.isAfter(startOfWeek)).toList();
+    final active = streak > 0;
+    return Tooltip(
+      message: '${plural(streak, 'semaine')} d\'affilée avec l\'objectif atteint',
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(AppSpace.m, AppSpace.s, AppSpace.l, AppSpace.s),
+        decoration: BoxDecoration(
+          color: active ? AppColors.flame : AppColors.surfaceMuted,
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(LucideIcons.flame, size: 18, color: active ? AppColors.ink : AppColors.inkFaint),
+            const SizedBox(width: AppSpace.xs),
+            Text(
+              '$streak',
+              style: AppText.figureM.copyWith(color: active ? AppColors.ink : AppColors.inkFaint),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
-    final thisWeekCount = weekWorkouts.length;
+/// Bloc principal de l'accueil : la séance du jour, la séance en cours,
+/// ou un jour de repos. C'est le seul bloc sombre de l'écran.
+class _TodayCard extends StatelessWidget {
+  final WorkoutSession? session;
+  final CompletedWorkout? activeWorkout;
+  final CompletedWorkout? lastWorkout;
+  final VoidCallback onOpenSessions;
+
+  const _TodayCard({
+    required this.session,
+    required this.activeWorkout,
+    required this.lastWorkout,
+    required this.onOpenSessions,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final String caption;
+    final String title;
+    final String? detail;
+    final Widget action;
+    Color? plateColor;
+
+    if (activeWorkout != null) {
+      // Une séance est en cours : la reprendre est la seule chose qui compte.
+      caption = 'Séance en cours';
+      title = activeWorkout!.sessionName;
+      detail = '${plural(activeWorkout!.totalSets, 'série')} '
+          '${activeWorkout!.totalSets > 1 ? 'enregistrées' : 'enregistrée'}';
+      action = FilledButton.icon(
+        onPressed: () => openActiveWorkout(context),
+        icon: const Icon(LucideIcons.play, size: 18),
+        label: const Text('Reprendre la séance'),
+      );
+    } else if (session != null) {
+      caption = 'Prévu aujourd\'hui';
+      title = session!.name;
+      plateColor = AppColors.sessionColor(session!.color);
+      final count = plural(session!.exerciseRefs.length, 'exercice');
+      detail = lastWorkout == null
+          ? count
+          : '$count, dernière fois le ${DateFormat('d MMMM', 'fr_FR').format(lastWorkout!.date)}';
+      action = FilledButton.icon(
+        onPressed: () => startWorkout(context, session!),
+        icon: const Icon(LucideIcons.play, size: 18),
+        label: const Text('Commencer la séance'),
+      );
+    } else {
+      caption = 'Rien de prévu';
+      title = 'Jour de repos';
+      detail = 'Envie de t\'entraîner quand même ? Lance n\'importe quelle séance.';
+      action = OutlinedButton(
+        onPressed: onOpenSessions,
+        style: OutlinedButton.styleFrom(
+          foregroundColor: Colors.white,
+          side: const BorderSide(color: Colors.white24, width: 1.5),
+        ),
+        child: const Text('Voir mes séances'),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(AppSpace.xl),
+      decoration: BoxDecoration(
+        color: AppColors.ink,
+        borderRadius: BorderRadius.circular(AppRadius.l),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              if (plateColor != null) ...[
+                PlateMarker(color: plateColor, size: 14),
+                const SizedBox(width: AppSpace.s),
+              ],
+              Text(caption, style: AppText.label.copyWith(color: Colors.white70)),
+            ],
+          ),
+          const SizedBox(height: AppSpace.s),
+          Text(title, style: AppText.display.copyWith(color: Colors.white, fontSize: 38)),
+          if (detail != null) ...[
+            const SizedBox(height: AppSpace.s),
+            Text(detail, style: AppText.body.copyWith(color: Colors.white60)),
+          ],
+          const SizedBox(height: AppSpace.xl),
+          SizedBox(width: double.infinity, child: action),
+        ],
+      ),
+    );
+  }
+}
+
+/// Objectif hebdomadaire : semaine jour par jour et progression.
+class _WeekPanel extends StatelessWidget {
+  final WorkoutProvider provider;
+
+  const _WeekPanel({required this.provider});
+
+  @override
+  Widget build(BuildContext context) {
+    final streak = provider.streak;
+    final done = provider.workoutsThisWeek;
+    final goal = streak.weeklyGoal;
+    final goalMet = done >= goal;
+
+    return Panel(
+      padding: const EdgeInsets.fromLTRB(AppSpace.l, AppSpace.m, AppSpace.l, AppSpace.l),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(child: Text('Cette semaine', style: AppText.heading)),
+              TextButton(
+                onPressed: () => _showGoalPicker(context, goal),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.inkSoft,
+                  textStyle: AppText.label,
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpace.s),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('Objectif : ${plural(goal, 'séance')}'),
+                    const SizedBox(width: AppSpace.xs),
+                    const Icon(LucideIcons.chevron_down, size: 16),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpace.m),
+          _WeekStrip(provider: provider),
+          const SizedBox(height: AppSpace.l),
+
+          // Barre de progression segmentée : un segment par séance visée.
+          Row(
+            children: [
+              for (var i = 0; i < goal; i++) ...[
+                if (i > 0) const SizedBox(width: AppSpace.xs),
+                Expanded(
+                  child: Container(
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: i < done
+                          ? (goalMet ? AppColors.flame : AppColors.success)
+                          : AppColors.surfaceMuted,
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: AppSpace.m),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  goalMet
+                      ? 'Objectif atteint, la semaine est validée.'
+                      : '${(done).clamp(0, goal)} sur $goal, encore ${plural(goal - done, 'séance')}.',
+                  style: AppText.label.copyWith(color: goalMet ? AppColors.ink : AppColors.inkSoft),
+                ),
+              ),
+              if (streak.bestStreak > 0)
+                Text('Record : ${plural(streak.bestStreak, 'sem.', 'sem.')}', style: AppText.caption),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showGoalPicker(BuildContext context, int currentGoal) {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(AppSpace.xl, 0, AppSpace.xl, AppSpace.xl),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Objectif hebdomadaire', style: AppText.title),
+              const SizedBox(height: AppSpace.xs),
+              Text(
+                'Combien de séances par semaine ? Chaque semaine tenue ajoute une flamme.',
+                style: AppText.body.copyWith(color: AppColors.inkSoft),
+              ),
+              const SizedBox(height: AppSpace.xl),
+              Row(
+                children: [
+                  for (var goal = 1; goal <= 7; goal++) ...[
+                    if (goal > 1) const SizedBox(width: AppSpace.s),
+                    Expanded(
+                      child: _GoalOption(
+                        value: goal,
+                        selected: goal == currentGoal,
+                        onTap: () {
+                          provider.updateWeeklyGoal(goal);
+                          Navigator.pop(ctx);
+                        },
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _GoalOption extends StatelessWidget {
+  final int value;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _GoalOption({required this.value, required this.selected, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? AppColors.ink : AppColors.chalk,
+      borderRadius: BorderRadius.circular(AppRadius.s),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.s),
+        child: SizedBox(
+          height: 52,
+          child: Center(
+            child: Text(
+              '$value',
+              style: AppText.figureM.copyWith(color: selected ? Colors.white : AppColors.ink),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Les sept jours de la semaine : séance faite, séance prévue ou repos.
+class _WeekStrip extends StatelessWidget {
+  final WorkoutProvider provider;
+
+  const _WeekStrip({required this.provider});
+
+  static const _letters = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final monday = UserStreak.getStartOfWeek(now);
+    final doneDays = provider.workoutsInWeekOf(now).map((w) => w.date.weekday).toSet();
 
     return Row(
       children: [
-        Expanded(
-          child: StatCard(
-            title: 'Cette semaine',
-            value: '$thisWeekCount',
-            subtitle: 'séances',
-            icon: LucideIcons.calendar_check,
-            iconColor: AppColors.success,
+        for (var day = DateTime.monday; day <= DateTime.sunday; day++)
+          Expanded(
+            child: _DayDot(
+              letter: _letters[day - 1],
+              dayOfMonth: DateTime(monday.year, monday.month, monday.day + day - 1).day,
+              isToday: day == now.weekday,
+              isDone: doneDays.contains(day),
+              plannedColor: _plannedColor(day),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Color? _plannedColor(int day) {
+    final id = provider.schedule.getSession(day);
+    if (id == null) return null;
+    final session = provider.getSessionById(id);
+    return session == null ? null : AppColors.sessionColor(session.color);
+  }
+}
+
+class _DayDot extends StatelessWidget {
+  final String letter;
+  final int dayOfMonth;
+  final bool isToday;
+  final bool isDone;
+  final Color? plannedColor;
+
+  const _DayDot({
+    required this.letter,
+    required this.dayOfMonth,
+    required this.isToday,
+    required this.isDone,
+    required this.plannedColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final Widget marker;
+    if (isDone) {
+      marker = Container(
+        width: 34,
+        height: 34,
+        decoration: const BoxDecoration(color: AppColors.success, shape: BoxShape.circle),
+        child: const Icon(LucideIcons.check, size: 18, color: Colors.white),
+      );
+    } else {
+      marker = Container(
+        width: 34,
+        height: 34,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: isToday ? AppColors.chalk : null,
+          border: Border.all(
+            color: isToday ? AppColors.ink : AppColors.line,
+            width: isToday ? 2 : 1,
           ),
         ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: StatCard(
-            title: 'Série',
-            value: '$currentStreak',
-            subtitle: 'semaine${currentStreak > 1 ? 's' : ''} 🔥',
-            icon: LucideIcons.flame,
-            iconColor: currentStreak > 0 ? const Color(0xFFFF6B00) : AppColors.textTertiary,
+        alignment: Alignment.center,
+        child: plannedColor != null
+            ? PlateMarker(color: plannedColor!, size: 12)
+            : Text(
+                '$dayOfMonth',
+                style: AppText.caption.copyWith(
+                  color: isToday ? AppColors.ink : AppColors.inkFaint,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+      );
+    }
+
+    return Column(
+      children: [
+        Text(
+          letter,
+          style: AppText.caption.copyWith(
+            color: isToday ? AppColors.ink : AppColors.inkFaint,
+            fontWeight: isToday ? FontWeight.w700 : FontWeight.w500,
           ),
         ),
+        const SizedBox(height: AppSpace.s),
+        marker,
       ],
     );
   }
 }
 
-class _RecentWorkoutCard extends StatelessWidget {
+/// Ligne d'historique : séance passée, avec accès au détail.
+class _HistoryRow extends StatelessWidget {
   final CompletedWorkout workout;
 
-  const _RecentWorkoutCard({required this.workout});
+  const _HistoryRow({required this.workout});
 
   @override
   Widget build(BuildContext context) {
-    final dateFormat = DateFormat('EEEE d MMM', 'fr_FR');
+    final session = context.read<WorkoutProvider>().getSessionById(workout.sessionId);
+    final color = session == null ? AppColors.plateGrey : AppColors.sessionColor(session.color);
+    final date = capitalize(DateFormat('EEEE d MMM', 'fr_FR').format(workout.date));
 
-    return GestureDetector(
-      onTap: () {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => WorkoutDetailScreen(workout: workout),
-          ),
-        );
-      },
-      child: GradientCard(
-        margin: const EdgeInsets.only(bottom: 12),
+    return InkWell(
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => WorkoutDetailScreen(workout: workout)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpace.l, vertical: AppSpace.m + 2),
         child: Row(
           children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: AppColors.warning.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(
-                LucideIcons.dumbbell,
-                color: AppColors.warning,
-                size: 20,
-              ),
-            ),
-            const SizedBox(width: 12),
+            PlateMarker(color: color, size: 16),
+            const SizedBox(width: AppSpace.m),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    workout.sessionName,
-                    style: const TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    dateFormat.format(workout.date),
-                    style: const TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 12,
-                    ),
-                  ),
+                  Text(workout.sessionName, style: AppText.heading, overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 2),
+                  Text('$date, ${formatDuration(workout.duration)}', style: AppText.caption),
                 ],
               ),
             ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  '${workout.totalSets} séries',
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(width: 8),
-            const Icon(
-              LucideIcons.chevron_right,
-              color: AppColors.textTertiary,
-              size: 20,
-            ),
+            const SizedBox(width: AppSpace.s),
+            Text('${workout.totalSets}', style: AppText.figureM),
+            const SizedBox(width: AppSpace.xs),
+            Text(workout.totalSets > 1 ? 'séries' : 'série', style: AppText.caption),
+            const SizedBox(width: AppSpace.s),
+            const Icon(LucideIcons.chevron_right, size: 18, color: AppColors.inkFaint),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _StreakSection extends StatelessWidget {
-  final UserStreak streak;
-  final int workoutsThisWeek;
-  final int totalWorkouts;
-  final Function(int) onUpdateGoal;
-
-  const _StreakSection({
-    required this.streak,
-    required this.workoutsThisWeek,
-    required this.totalWorkouts,
-    required this.onUpdateGoal,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final goalMet = workoutsThisWeek >= streak.weeklyGoal;
-    
-    return GradientCard(
-      backgroundColor: AppColors.surface,
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header with title and settings
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    goalMet ? LucideIcons.flame : LucideIcons.target,
-                    color: goalMet ? const Color(0xFFFF6B00) : AppColors.textSecondary,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 8),
-                  const Text(
-                    'OBJECTIF SEMAINE',
-                    style: TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1,
-                    ),
-                  ),
-                ],
-              ),
-              GestureDetector(
-                onTap: () => _showGoalPicker(context),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceLight,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        '${streak.weeklyGoal} séances',
-                        style: const TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      const Icon(
-                        LucideIcons.chevron_down,
-                        color: AppColors.textTertiary,
-                        size: 14,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-          
-          const SizedBox(height: 20),
-          
-          // Timeline / Frise chronologique
-          _WeeklyTimeline(
-            goal: streak.weeklyGoal,
-            completed: workoutsThisWeek,
-            goalMet: goalMet,
-          ),
-          
-          const SizedBox(height: 16),
-          
-          // Streak info (only show if has streak)
-          if (streak.currentStreak > 0 || goalMet)
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                gradient: goalMet
-                  ? const LinearGradient(
-                      colors: [Color(0xFFFF6B00), Color(0xFFFFD700)],
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
-                    )
-                  : null,
-                color: !goalMet ? AppColors.surfaceLight : null,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  if (goalMet) ...[
-                    const Text('🔥', style: TextStyle(fontSize: 20)),
-                    const SizedBox(width: 8),
-                    Text(
-                      '${streak.currentStreak} semaine${streak.currentStreak > 1 ? 's' : ''} de suite !',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ] else ...[
-                    const Icon(
-                      LucideIcons.flame,
-                      color: Color(0xFFFF6B00),
-                      size: 18,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '${streak.currentStreak} semaine${streak.currentStreak > 1 ? 's' : ''} de suite',
-                      style: const TextStyle(
-                        color: AppColors.textPrimary,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          
-          const SizedBox(height: 12),
-          
-          // Total workouts counter
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  const Icon(
-                    LucideIcons.dumbbell,
-                    color: AppColors.warning,
-                    size: 16,
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    '$totalWorkouts séance${totalWorkouts > 1 ? 's' : ''} au total',
-                    style: const TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-              if (streak.bestStreak > 0)
-                Row(
-                  children: [
-                    const Icon(
-                      LucideIcons.trophy,
-                      color: AppColors.warning,
-                      size: 14,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Record: ${streak.bestStreak} sem.',
-                      style: const TextStyle(
-                        color: AppColors.warning,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showGoalPicker(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'OBJECTIF HEBDOMADAIRE',
-              style: TextStyle(
-                color: AppColors.textPrimary,
-                fontSize: 18,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 1,
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Combien de séances veux-tu faire par semaine ?',
-              style: TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 14,
-              ),
-            ),
-            const SizedBox(height: 20),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: List.generate(7, (index) {
-                final goal = index + 1;
-                final isSelected = goal == streak.weeklyGoal;
-                return GestureDetector(
-                  onTap: () {
-                    onUpdateGoal(goal);
-                    Navigator.pop(context);
-                  },
-                  child: Container(
-                    width: 60,
-                    height: 60,
-                    decoration: BoxDecoration(
-                      color: isSelected ? AppColors.primary : AppColors.surfaceLight,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: isSelected ? AppColors.primary : AppColors.surfaceHighlight,
-                        width: 2,
-                      ),
-                    ),
-                    child: Center(
-                      child: Text(
-                        '$goal',
-                        style: TextStyle(
-                          color: isSelected ? Colors.white : AppColors.textPrimary,
-                          fontSize: 22,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              }),
-            ),
-            const SizedBox(height: 20),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Widget de frise chronologique pour les séances de la semaine
-class _WeeklyTimeline extends StatelessWidget {
-  final int goal;
-  final int completed;
-  final bool goalMet;
-
-  const _WeeklyTimeline({
-    required this.goal,
-    required this.completed,
-    required this.goalMet,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: List.generate(goal * 2 - 1, (index) {
-        // Indices pairs = points, indices impairs = lignes
-        if (index.isEven) {
-          final pointIndex = index ~/ 2;
-          final isCompleted = pointIndex < completed;
-          final isCurrent = pointIndex == completed;
-          
-          return _TimelinePoint(
-            pointIndex: pointIndex,
-            isCompleted: isCompleted,
-            isCurrent: isCurrent,
-            isLast: pointIndex == goal - 1,
-            goalMet: goalMet,
-          );
-        } else {
-          final lineIndex = index ~/ 2;
-          final isActive = lineIndex < completed;
-          
-          return Expanded(
-            child: Container(
-              height: 3,
-              decoration: BoxDecoration(
-                color: isActive 
-                  ? (goalMet ? const Color(0xFFFF6B00) : AppColors.primary)
-                  : AppColors.surfaceLight,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          );
-        }
-      }),
-    );
-  }
-}
-
-class _TimelinePoint extends StatelessWidget {
-  final int pointIndex;
-  final bool isCompleted;
-  final bool isCurrent;
-  final bool isLast;
-  final bool goalMet;
-
-  const _TimelinePoint({
-    required this.pointIndex,
-    required this.isCompleted,
-    required this.isCurrent,
-    required this.isLast,
-    required this.goalMet,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final size = isCompleted || isCurrent ? 32.0 : 24.0;
-    
-    // Si c'est le dernier point et l'objectif est atteint, montrer la flamme
-    if (isLast && goalMet) {
-      return Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFFFF6B00), Color(0xFFFFD700)],
-            begin: Alignment.bottomCenter,
-            end: Alignment.topCenter,
-          ),
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFFFF6B00).withValues(alpha: 0.5),
-              blurRadius: 12,
-              spreadRadius: 2,
-            ),
-          ],
-        ),
-        child: const Center(
-          child: Text('🔥', style: TextStyle(fontSize: 18)),
-        ),
-      );
-    }
-    
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: isCompleted 
-          ? AppColors.primary 
-          : (isCurrent ? AppColors.surfaceLight : AppColors.surfaceLight),
-        shape: BoxShape.circle,
-        border: isCurrent 
-          ? Border.all(color: AppColors.primary, width: 2)
-          : null,
-        boxShadow: isCompleted 
-          ? [
-              BoxShadow(
-                color: AppColors.primary.withValues(alpha: 0.3),
-                blurRadius: 8,
-                spreadRadius: 1,
-              ),
-            ]
-          : null,
-      ),
-      child: Center(
-        child: isCompleted
-          ? const Icon(
-              LucideIcons.check,
-              color: Colors.white,
-              size: 16,
-            )
-          : Text(
-              '${pointIndex + 1}',
-              style: TextStyle(
-                color: isCurrent ? AppColors.textPrimary : AppColors.textTertiary,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
       ),
     );
   }

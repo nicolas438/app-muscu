@@ -1,0 +1,26 @@
+import 'package:flutter/material.dart';
+import '../theme/app_theme.dart';
+
+/// Pastille en forme de disque de musculation (avec son trou central),
+/// utilisée pour identifier la couleur d'une séance.
+class PlateMarker extends StatelessWidget {
+  final Color color;
+  final double size;
+
+  const PlateMarker({super.key, required this.color, this.size = 14});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+      alignment: Alignment.center,
+      child: Container(
+        width: size * 0.32,
+        height: size * 0.32,
+        decoration: const BoxDecoration(color: AppColors.surface, shape: BoxShape.circle),
+      ),
+    );
+  }
+}

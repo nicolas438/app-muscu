@@ -1,288 +1,222 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:provider/provider.dart';
-import '../../theme/app_theme.dart';
-import '../../providers/providers.dart';
 import '../../models/models.dart';
+import '../../providers/providers.dart';
+import '../../theme/app_theme.dart';
+import '../../utils/format.dart';
 import '../../widgets/widgets.dart';
 
+/// Onglet « Planning » : une séance (ou du repos) pour chaque jour de la semaine.
 class ScheduleScreen extends StatelessWidget {
   const ScheduleScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Planning Hebdomadaire'),
-        automaticallyImplyLeading: false,
-      ),
-      body: Consumer<WorkoutProvider>(
-        builder: (context, provider, _) {
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: 7,
-            itemBuilder: (context, index) {
-              final dayOfWeek = index + 1;
-              final sessionId = provider.schedule.getSession(dayOfWeek);
-              final session = sessionId != null ? provider.getSessionById(sessionId) : null;
-              final isToday = DateTime.now().weekday == dayOfWeek;
+    final provider = context.watch<WorkoutProvider>();
+    final today = DateTime.now().weekday;
 
-              return _DayCard(
-                dayOfWeek: dayOfWeek,
-                session: session,
-                isToday: isToday,
-                sessions: provider.sessions,
-                onSessionChanged: (newSessionId) {
-                  provider.updateSchedule(dayOfWeek, newSessionId);
-                },
-              );
-            },
-          );
-        },
+    final plannedDays = [
+      for (var day = DateTime.monday; day <= DateTime.sunday; day++)
+        if (_sessionFor(provider, day) != null) day,
+    ];
+
+    return Scaffold(
+      body: SafeArea(
+        bottom: false,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(AppSpace.page, AppSpace.l, AppSpace.page, AppSpace.xxl),
+          children: [
+            const Text('Planning', style: AppText.display),
+            const SizedBox(height: AppSpace.xs),
+            Text(
+              plannedDays.isEmpty
+                  ? 'Touche un jour pour y prévoir une séance.'
+                  : '${plural(plannedDays.length, 'séance')} prévue${plannedDays.length > 1 ? 's' : ''} par semaine.',
+              style: AppText.label,
+            ),
+            const SizedBox(height: AppSpace.xl),
+            Panel(
+              padding: EdgeInsets.zero,
+              child: Column(
+                children: [
+                  for (var day = DateTime.monday; day <= DateTime.sunday; day++) ...[
+                    if (day > DateTime.monday) const Divider(indent: AppSpace.l, endIndent: AppSpace.l),
+                    _DayRow(
+                      dayOfWeek: day,
+                      isToday: day == today,
+                      session: _sessionFor(provider, day),
+                      onTap: () => _pickSession(context, provider, day),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static WorkoutSession? _sessionFor(WorkoutProvider provider, int day) {
+    final id = provider.schedule.getSession(day);
+    return id == null ? null : provider.getSessionById(id);
+  }
+
+  void _pickSession(BuildContext context, WorkoutProvider provider, int day) {
+    final current = _sessionFor(provider, day);
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) {
+        void choose(String? sessionId) {
+          provider.updateSchedule(day, sessionId);
+          Navigator.pop(ctx);
+        }
+
+        return ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.75),
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(AppSpace.xl, 0, AppSpace.xl, AppSpace.m),
+                  child: Text(WeeklySchedule.getDayName(day), style: AppText.title),
+                ),
+                Flexible(
+                  child: ListView(
+                    shrinkWrap: true,
+                    padding: const EdgeInsets.fromLTRB(AppSpace.m, 0, AppSpace.m, AppSpace.l),
+                    children: [
+                      _SessionOption(
+                        leading: const Icon(LucideIcons.moon, size: 20, color: AppColors.inkSoft),
+                        title: 'Repos',
+                        selected: current == null,
+                        onTap: () => choose(null),
+                      ),
+                      for (final session in provider.sessions)
+                        _SessionOption(
+                          leading: PlateMarker(color: AppColors.sessionColor(session.color), size: 20),
+                          title: session.name,
+                          subtitle: plural(session.exerciseRefs.length, 'exercice'),
+                          selected: current?.id == session.id,
+                          onTap: () => choose(session.id),
+                        ),
+                      if (provider.sessions.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.all(AppSpace.l),
+                          child: Text(
+                            'Crée d\'abord une séance dans l\'onglet Séances.',
+                            style: AppText.body.copyWith(color: AppColors.inkSoft),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _DayRow extends StatelessWidget {
+  final int dayOfWeek;
+  final bool isToday;
+  final WorkoutSession? session;
+  final VoidCallback onTap;
+
+  const _DayRow({
+    required this.dayOfWeek,
+    required this.isToday,
+    required this.session,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpace.l, vertical: AppSpace.l),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 96,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    WeeklySchedule.getDayName(dayOfWeek),
+                    style: AppText.heading.copyWith(
+                      fontWeight: isToday ? FontWeight.w700 : FontWeight.w500,
+                    ),
+                  ),
+                  if (isToday)
+                    Text(
+                      'Aujourd\'hui',
+                      style: AppText.caption.copyWith(color: AppColors.primary, fontWeight: FontWeight.w600),
+                    ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: session == null
+                  ? const Text('Repos', style: AppText.label)
+                  : Row(
+                      children: [
+                        PlateMarker(color: AppColors.sessionColor(session!.color), size: 14),
+                        const SizedBox(width: AppSpace.s),
+                        Expanded(
+                          child: Text(
+                            session!.name,
+                            style: AppText.body.copyWith(fontWeight: FontWeight.w600),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
+            const Icon(LucideIcons.chevron_right, size: 18, color: AppColors.inkFaint),
+          ],
+        ),
       ),
     );
   }
 }
 
-class _DayCard extends StatelessWidget {
-  final int dayOfWeek;
-  final WorkoutSession? session;
-  final bool isToday;
-  final List<WorkoutSession> sessions;
-  final Function(String?) onSessionChanged;
+class _SessionOption extends StatelessWidget {
+  final Widget leading;
+  final String title;
+  final String? subtitle;
+  final bool selected;
+  final VoidCallback onTap;
 
-  const _DayCard({
-    required this.dayOfWeek,
-    this.session,
-    required this.isToday,
-    required this.sessions,
-    required this.onSessionChanged,
+  const _SessionOption({
+    required this.leading,
+    required this.title,
+    this.subtitle,
+    required this.selected,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final dayName = WeeklySchedule.getDayName(dayOfWeek);
-    
-    Color? sessionColor;
-    if (session != null) {
-      final colorIndex = session!.color != null
-          ? int.tryParse(session!.color!) ?? 0
-          : session!.name.hashCode % AppColors.sessionColors.length;
-      sessionColor = AppColors.sessionColors[colorIndex.abs() % AppColors.sessionColors.length];
-    }
-
-    return GradientCard(
-      margin: const EdgeInsets.only(bottom: 12),
-      backgroundColor: isToday ? AppColors.surfaceHighlight : AppColors.surface,
-      onTap: () => _showSessionPicker(context),
-      child: Row(
-        children: [
-          // Day indicator
-          Container(
-            width: 56,
-            height: 56,
-            decoration: BoxDecoration(
-              color: isToday ? AppColors.primary : AppColors.surfaceLight,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  WeeklySchedule.getDayShortName(dayOfWeek),
-                  style: TextStyle(
-                    color: isToday ? Colors.white : AppColors.textSecondary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                if (isToday)
-                  const Text(
-                    '•',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 16),
-
-          // Day name and session
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      dayName,
-                      style: TextStyle(
-                        color: AppColors.textPrimary,
-                        fontSize: 16,
-                        fontWeight: isToday ? FontWeight.bold : FontWeight.w500,
-                      ),
-                    ),
-                    if (isToday) ...[
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: AppColors.primary,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Text(
-                          'Aujourd\'hui',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 4),
-                if (session != null)
-                  Row(
-                    children: [
-                      Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: sessionColor,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          session!.name,
-                          style: const TextStyle(
-                            color: AppColors.textSecondary,
-                            fontSize: 14,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  )
-                else
-                  const Text(
-                    'Repos',
-                    style: TextStyle(
-                      color: AppColors.textTertiary,
-                      fontSize: 14,
-                      fontStyle: FontStyle.italic,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-
-          // Arrow
-          const Icon(
-            LucideIcons.chevron_right,
-            color: AppColors.textTertiary,
-            size: 20,
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showSessionPicker(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (ctx) => FractionallySizedBox(
-        heightFactor: 0.75,
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Choisir une séance pour ${WeeklySchedule.getDayName(dayOfWeek)}',
-                style: const TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Rest option
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceLight,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(LucideIcons.bed, color: AppColors.textTertiary),
-                ),
-                title: const Text('Repos', style: TextStyle(color: AppColors.textPrimary)),
-                selected: session == null,
-                onTap: () {
-                  onSessionChanged(null);
-                  Navigator.pop(ctx);
-                },
-              ),
-
-              const Divider(),
-
-              // Sessions list (scrollable)
-              Expanded(
-                child: sessions.isEmpty
-                    ? const Padding(
-                        padding: EdgeInsets.all(16),
-                        child: Text(
-                          'Aucune séance créée. Crée d\'abord une séance dans l\'onglet "Séances".',
-                          style: TextStyle(color: AppColors.textSecondary),
-                        ),
-                      )
-                    : ListView.builder(
-                        itemCount: sessions.length,
-                        itemBuilder: (context, idx) {
-                          final s = sessions[idx];
-                          final colorIndex = s.color != null
-                              ? int.tryParse(s.color!) ?? 0
-                              : s.name.hashCode % AppColors.sessionColors.length;
-                          final sColor = AppColors.sessionColors[colorIndex.abs() % AppColors.sessionColors.length];
-
-                          return ListTile(
-                            leading: Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: sColor.withValues(alpha: 0.2),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Icon(LucideIcons.dumbbell, color: sColor),
-                            ),
-                            title: Text(s.name, style: const TextStyle(color: AppColors.textPrimary)),
-                            subtitle: Text(
-                              '${s.exerciseRefs.length} exercices',
-                              style: const TextStyle(color: AppColors.textSecondary),
-                            ),
-                            selected: session?.id == s.id,
-                            onTap: () {
-                              onSessionChanged(s.id);
-                              Navigator.pop(ctx);
-                            },
-                          );
-                        },
-                      ),
-              ),
-
-              const SizedBox(height: 16),
-            ],
-          ),
-        ),
-      ),
+    return ListTile(
+      onTap: onTap,
+      leading: SizedBox(width: 28, child: Center(child: leading)),
+      title: Text(title, style: AppText.heading),
+      subtitle: subtitle == null ? null : Text(subtitle!, style: AppText.caption),
+      trailing: selected ? const Icon(LucideIcons.check, color: AppColors.primary) : null,
+      selected: selected,
+      selectedTileColor: AppColors.chalk,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.s)),
     );
   }
 }

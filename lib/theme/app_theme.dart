@@ -1,286 +1,335 @@
 import 'package:flutter/material.dart';
-import 'dart:ui';
 
-/// Premium Modern Design System 2026 - Professional Fitness App
+/// Palette « Craie & disques ».
+///
+/// Le fond rappelle la magnésie, l'encre le fer des barres, et les accents
+/// reprennent le code couleur officiel des disques de compétition :
+/// rouge 25 kg, bleu 20 kg, jaune 15 kg, vert 10 kg.
+/// Chaque accent a un rôle unique dans l'interface :
+/// - bleu : actions principales ;
+/// - rouge : records personnels ;
+/// - jaune : objectif hebdomadaire (flammes) ;
+/// - vert : séries validées, progression.
 class AppColors {
-  // Primary Colors - Deep Blue (Trust, Premium)
-  static const Color primary = Color(0xFF0F172A);        // Slate 900 - Professional dark
-  static const Color primaryLight = Color(0xFF1E293B);   // Slate 800
-  static const Color primaryDark = Color(0xFF020617);    // Slate 950
+  AppColors._();
 
-  // Accent Colors - Electric Blue (Energy, Modern)
-  static const Color accent = Color(0xFF3B82F6);         // Blue 500 - Vibrant
-  static const Color accentLight = Color(0xFF60A5FA);    // Blue 400
-  static const Color accentDark = Color(0xFF2563EB);     // Blue 600
+  // Fonds et surfaces
+  static const Color chalk = Color(0xFFF2F2EE);
+  static const Color surface = Color(0xFFFFFFFF);
+  static const Color surfaceMuted = Color(0xFFE9E9E3);
+  static const Color line = Color(0xFFDEDED7);
 
-  // Background Colors - Clean Dark Mode
-  static const Color background = Color(0xFF0F172A);     // Deep slate
-  static const Color surface = Color(0xFF1E293B);        // Card surface
-  static const Color surfaceLight = Color(0xFF334155);   // Elevated surface
-  static const Color surfaceHighlight = Color(0xFF475569); // Hover state
+  // Encre (textes et éléments structurants)
+  static const Color ink = Color(0xFF1A1D21);
+  static const Color inkSoft = Color(0xFF5A6068);
+  static const Color inkFaint = Color(0xFF979CA3);
 
-  // Premium Special Colors
-  static const Color glass = Color(0x1AFFFFFF);         // Glassmorphism overlay
-  static const Color glow = Color(0xFF60A5FA);          // Neon glow effect
-  static const Color shimmer = Color(0x33FFFFFF);       // Shimmer highlight
+  // Couleurs des disques
+  static const Color plateRed = Color(0xFFD63A2F);
+  static const Color plateBlue = Color(0xFF2453C8);
+  static const Color plateYellow = Color(0xFFF2B21B);
+  static const Color plateGreen = Color(0xFF23965A);
+  static const Color plateGrey = Color(0xFF7A808A);
 
-  // Text Colors - High Contrast
-  static const Color textPrimary = Color(0xFFF8FAFC);   // Slate 50
-  static const Color textSecondary = Color(0xFFCBD5E1); // Slate 300
-  static const Color textTertiary = Color(0xFF94A3B8);  // Slate 400
+  // Rôles
+  static const Color primary = plateBlue;
+  static const Color record = plateRed;
+  static const Color flame = plateYellow;
+  static const Color success = plateGreen;
+  static const Color error = Color(0xFFB3261E);
 
-  // Status Colors - Modern Vibrant
-  static const Color success = Color(0xFF10B981);       // Emerald 500
-  static const Color successLight = Color(0xFF34D399);  // Emerald 400
-  static const Color warning = Color(0xFFF59E0B);       // Amber 500
-  static const Color warningLight = Color(0xFFFBBF24);  // Amber 400
-  static const Color error = Color(0xFFEF4444);         // Red 500
-  static const Color errorLight = Color(0xFFF87171);    // Red 400
-  static const Color info = Color(0xFF06B6D4);          // Cyan 500
-  static const Color purple = Color(0xFFA855F7);        // Purple 500
-
-  // Workout/Session Colors - Modern Gradient Palette
+  /// Couleurs proposées pour identifier une séance.
   static const List<Color> sessionColors = [
-    Color(0xFF3B82F6), // Blue - Classic
-    Color(0xFF8B5CF6), // Violet - Power
-    Color(0xFFEC4899), // Pink - Energy
-    Color(0xFF10B981), // Emerald - Endurance
-    Color(0xFFF59E0B), // Amber - Strength
-    Color(0xFF06B6D4), // Cyan - Speed
-    Color(0xFFF97316), // Orange - Explosive
-    Color(0xFFA855F7), // Purple - Technique
+    plateRed,
+    plateBlue,
+    plateYellow,
+    plateGreen,
+    plateGrey,
+    ink,
   ];
 
-  // Chart Colors
-  static const List<Color> chartColors = [
-    Color(0xFF3B82F6),
-    Color(0xFF8B5CF6),
-    Color(0xFF10B981),
-    Color(0xFFF59E0B),
-    Color(0xFFEC4899),
-  ];
+  /// Couleur d'une séance à partir de l'index enregistré.
+  ///
+  /// Les anciens index (palette de 8 couleurs) restent valides grâce au modulo.
+  static Color sessionColor(String? storedIndex) {
+    final index = int.tryParse(storedIndex ?? '') ?? 0;
+    return sessionColors[index.abs() % sessionColors.length];
+  }
 
-  // Gradients - Premium Modern 2026
-  static const LinearGradient primaryGradient = LinearGradient(
-    colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
-    begin: Alignment.topCenter,
-    end: Alignment.bottomCenter,
-  );
-
-  static const LinearGradient accentGradient = LinearGradient(
-    colors: [Color(0xFF3B82F6), Color(0xFF2563EB)],
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-  );
-
-  static const LinearGradient successGradient = LinearGradient(
-    colors: [Color(0xFF10B981), Color(0xFF059669)],
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-  );
-
-  static const LinearGradient premiumGradient = LinearGradient(
-    colors: [Color(0xFF8B5CF6), Color(0xFF3B82F6), Color(0xFF06B6D4)],
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-  );
-
-  static const LinearGradient cardGradient = LinearGradient(
-    colors: [Color(0xFF1E293B), Color(0xFF334155)],
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-  );
-
-  static const LinearGradient glassGradient = LinearGradient(
-    colors: [Color(0x33FFFFFF), Color(0x1AFFFFFF)],
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-  );
-
-  static const LinearGradient shimmerGradient = LinearGradient(
-    colors: [
-      Color(0x00FFFFFF),
-      Color(0x33FFFFFF),
-      Color(0x00FFFFFF),
-    ],
-    stops: [0.0, 0.5, 1.0],
-  );
-
-  // Box Shadows - Depth & Elevation
-  static List<BoxShadow> get cardShadow => [
-    BoxShadow(
-      color: Colors.black.withOpacity(0.2),
-      blurRadius: 20,
-      offset: const Offset(0, 10),
-    ),
-  ];
-
-  static List<BoxShadow> get elevatedShadow => [
-    BoxShadow(
-      color: Colors.black.withOpacity(0.3),
-      blurRadius: 30,
-      offset: const Offset(0, 15),
-    ),
-  ];
-
-  static List<BoxShadow> get glowShadow => [
-    BoxShadow(
-      color: accent.withOpacity(0.3),
-      blurRadius: 25,
-      offset: const Offset(0, 0),
-    ),
-  ];
-
-  static List<BoxShadow> get innerShadow => [
-    BoxShadow(
-      color: Colors.black.withOpacity(0.5),
-      blurRadius: 10,
-      offset: const Offset(0, 2),
-    ),
-  ];
+  /// Couleur lisible pour un texte ou une icône posé sur [background].
+  static Color onColor(Color background) {
+    return background.computeLuminance() > 0.45 ? ink : Colors.white;
+  }
 }
 
+/// Espacements, sur une grille de 4 points.
+class AppSpace {
+  AppSpace._();
+
+  static const double xs = 4;
+  static const double s = 8;
+  static const double m = 12;
+  static const double l = 16;
+  static const double xl = 24;
+  static const double xxl = 32;
+
+  /// Marge horizontale des écrans.
+  static const double page = 20;
+}
+
+/// Rayons d'arrondi, du plus discret au plus marqué.
+class AppRadius {
+  AppRadius._();
+
+  static const double s = 10;
+  static const double m = 14;
+  static const double l = 20;
+}
+
+/// Styles de texte.
+///
+/// Barlow pour le texte courant ; Barlow Condensed très grasse pour les
+/// chiffres et les titres, à la manière des marquages sur les disques.
+/// Les chiffres utilisent des chasses fixes pour ne pas « sauter » quand
+/// une valeur change (chrono, compteurs).
+class AppText {
+  AppText._();
+
+  static const String _sans = 'Barlow';
+  static const String _condensed = 'BarlowCondensed';
+  static const List<FontFeature> _tabular = [FontFeature.tabularFigures()];
+
+  /// Très grands chiffres : saisie de la charge et des répétitions.
+  static const TextStyle figureXL = TextStyle(
+    fontFamily: _condensed,
+    fontWeight: FontWeight.w800,
+    fontSize: 64,
+    height: 1.0,
+    letterSpacing: -1,
+    color: AppColors.ink,
+    fontFeatures: _tabular,
+  );
+
+  /// Grands chiffres : statistiques mises en avant.
+  static const TextStyle figureL = TextStyle(
+    fontFamily: _condensed,
+    fontWeight: FontWeight.w800,
+    fontSize: 36,
+    height: 1.0,
+    letterSpacing: -0.5,
+    color: AppColors.ink,
+    fontFeatures: _tabular,
+  );
+
+  /// Chiffres moyens : séries, chrono, valeurs de liste.
+  static const TextStyle figureM = TextStyle(
+    fontFamily: _condensed,
+    fontWeight: FontWeight.w700,
+    fontSize: 22,
+    height: 1.1,
+    color: AppColors.ink,
+    fontFeatures: _tabular,
+  );
+
+  /// Titre d'écran.
+  static const TextStyle display = TextStyle(
+    fontFamily: _condensed,
+    fontWeight: FontWeight.w800,
+    fontSize: 34,
+    height: 1.05,
+    letterSpacing: -0.3,
+    color: AppColors.ink,
+  );
+
+  /// Titre de bloc ou de carte importante.
+  static const TextStyle title = TextStyle(
+    fontFamily: _sans,
+    fontWeight: FontWeight.w700,
+    fontSize: 20,
+    height: 1.2,
+    color: AppColors.ink,
+  );
+
+  /// Intitulé de section ou d'élément de liste.
+  static const TextStyle heading = TextStyle(
+    fontFamily: _sans,
+    fontWeight: FontWeight.w600,
+    fontSize: 16,
+    height: 1.25,
+    color: AppColors.ink,
+  );
+
+  /// Texte courant.
+  static const TextStyle body = TextStyle(
+    fontFamily: _sans,
+    fontWeight: FontWeight.w400,
+    fontSize: 15,
+    height: 1.4,
+    color: AppColors.ink,
+  );
+
+  /// Libellé secondaire (sous-titres, métadonnées).
+  static const TextStyle label = TextStyle(
+    fontFamily: _sans,
+    fontWeight: FontWeight.w500,
+    fontSize: 13,
+    height: 1.3,
+    color: AppColors.inkSoft,
+  );
+
+  /// Petit texte d'appoint (unités, dates).
+  static const TextStyle caption = TextStyle(
+    fontFamily: _sans,
+    fontWeight: FontWeight.w500,
+    fontSize: 12,
+    height: 1.3,
+    color: AppColors.inkFaint,
+  );
+}
+
+/// Thème Material de l'application.
 class AppTheme {
-  static ThemeData get darkTheme {
+  AppTheme._();
+
+  static ThemeData get light {
+    final buttonShape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.m));
+    const buttonText = TextStyle(fontFamily: 'Barlow', fontWeight: FontWeight.w600, fontSize: 16);
+
     return ThemeData(
       useMaterial3: true,
-      brightness: Brightness.dark,
-      scaffoldBackgroundColor: AppColors.background,
-      colorScheme: const ColorScheme.dark(
+      brightness: Brightness.light,
+      fontFamily: 'Barlow',
+      scaffoldBackgroundColor: AppColors.chalk,
+      colorScheme: const ColorScheme(
+        brightness: Brightness.light,
         primary: AppColors.primary,
-        secondary: AppColors.accent,
-        surface: AppColors.surface,
-        error: AppColors.error,
         onPrimary: Colors.white,
+        secondary: AppColors.ink,
         onSecondary: Colors.white,
-        onSurface: AppColors.textPrimary,
+        error: AppColors.error,
         onError: Colors.white,
+        surface: AppColors.surface,
+        onSurface: AppColors.ink,
+        onSurfaceVariant: AppColors.inkSoft,
+        outline: AppColors.line,
+        outlineVariant: AppColors.line,
       ),
       appBarTheme: const AppBarTheme(
-        backgroundColor: AppColors.background,
+        backgroundColor: AppColors.chalk,
+        foregroundColor: AppColors.ink,
         elevation: 0,
-        centerTitle: true,
-        titleTextStyle: TextStyle(
-          color: AppColors.textPrimary,
-          fontSize: 22,
-          fontWeight: FontWeight.w900,
-          letterSpacing: 1.5,
-        ),
-        iconTheme: IconThemeData(color: AppColors.textPrimary),
+        scrolledUnderElevation: 0,
+        centerTitle: false,
+        titleTextStyle: AppText.title,
       ),
-      cardTheme: CardThemeData(
-        color: AppColors.surface,
-        elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20), // Modern rounded
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: AppColors.primary,
+          foregroundColor: Colors.white,
+          minimumSize: const Size(64, 52),
+          padding: const EdgeInsets.symmetric(horizontal: AppSpace.xl),
+          shape: buttonShape,
+          textStyle: buttonText,
         ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.accent,
+          backgroundColor: AppColors.primary,
           foregroundColor: Colors.white,
           elevation: 0,
-          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 18),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          textStyle: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.5,
-          ),
+          minimumSize: const Size(64, 48),
+          shape: buttonShape,
+          textStyle: buttonText,
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: AppColors.primary,
-          side: const BorderSide(color: AppColors.primary, width: 1.5),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          textStyle: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-          ),
+          foregroundColor: AppColors.ink,
+          side: const BorderSide(color: AppColors.line, width: 1.5),
+          minimumSize: const Size(64, 52),
+          padding: const EdgeInsets.symmetric(horizontal: AppSpace.xl),
+          shape: buttonShape,
+          textStyle: buttonText,
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: AppColors.primary,
-          textStyle: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-          ),
+          textStyle: buttonText,
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: AppColors.surfaceLight,
+        fillColor: AppColors.surface,
+        contentPadding: const EdgeInsets.symmetric(horizontal: AppSpace.l, vertical: AppSpace.l),
+        hintStyle: AppText.body.copyWith(color: AppColors.inkFaint),
+        labelStyle: AppText.body.copyWith(color: AppColors.inkSoft),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
+          borderRadius: BorderRadius.circular(AppRadius.m),
+          borderSide: const BorderSide(color: AppColors.line),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
+          borderRadius: BorderRadius.circular(AppRadius.m),
+          borderSide: const BorderSide(color: AppColors.line),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.primary, width: 2),
+          borderRadius: BorderRadius.circular(AppRadius.m),
+          borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.error, width: 1),
+          borderRadius: BorderRadius.circular(AppRadius.m),
+          borderSide: const BorderSide(color: AppColors.error),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        hintStyle: const TextStyle(color: AppColors.textTertiary),
-        labelStyle: const TextStyle(color: AppColors.textSecondary),
       ),
-      floatingActionButtonTheme: const FloatingActionButtonThemeData(
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
-        elevation: 4,
-        shape: CircleBorder(),
-      ),
-      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+      navigationBarTheme: NavigationBarThemeData(
         backgroundColor: AppColors.surface,
-        selectedItemColor: AppColors.primary,
-        unselectedItemColor: AppColors.textTertiary,
-        type: BottomNavigationBarType.fixed,
-        elevation: 0,
+        surfaceTintColor: Colors.transparent,
+        indicatorColor: AppColors.chalk,
+        height: 68,
+        labelTextStyle: WidgetStateProperty.resolveWith((states) {
+          final selected = states.contains(WidgetState.selected);
+          return AppText.caption.copyWith(
+            color: selected ? AppColors.ink : AppColors.inkFaint,
+            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+          );
+        }),
+        iconTheme: WidgetStateProperty.resolveWith((states) {
+          final selected = states.contains(WidgetState.selected);
+          return IconThemeData(
+            size: 22,
+            color: selected ? AppColors.ink : AppColors.inkFaint,
+          );
+        }),
       ),
-      dividerTheme: const DividerThemeData(
-        color: AppColors.surfaceLight,
-        thickness: 1,
-      ),
-      chipTheme: ChipThemeData(
-        backgroundColor: AppColors.surfaceLight,
-        labelStyle: const TextStyle(color: AppColors.textPrimary),
-        selectedColor: AppColors.primary,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
-      ),
+      dividerTheme: const DividerThemeData(color: AppColors.line, thickness: 1, space: 1),
       snackBarTheme: SnackBarThemeData(
-        backgroundColor: AppColors.surfaceLight,
-        contentTextStyle: const TextStyle(color: AppColors.textPrimary),
+        backgroundColor: AppColors.ink,
+        contentTextStyle: AppText.body.copyWith(color: Colors.white),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.m)),
       ),
       dialogTheme: DialogThemeData(
         backgroundColor: AppColors.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.l)),
+        titleTextStyle: AppText.title,
+        contentTextStyle: AppText.body.copyWith(color: AppColors.inkSoft),
       ),
       bottomSheetTheme: const BottomSheetThemeData(
         backgroundColor: AppColors.surface,
+        surfaceTintColor: Colors.transparent,
+        showDragHandle: true,
+        dragHandleColor: AppColors.line,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
+      ),
+      progressIndicatorTheme: const ProgressIndicatorThemeData(color: AppColors.primary),
+      checkboxTheme: CheckboxThemeData(
+        fillColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected) ? AppColors.primary : null,
+        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
       ),
     );
   }

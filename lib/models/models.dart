@@ -8,3 +8,4 @@ export 'weekly_schedule.dart';
 export 'user_streak.dart';
 export 'global_exercise.dart';
 export 'session_exercise_ref.dart';
+export 'personal_record.dart';

@@ -34,6 +34,20 @@ class ExerciseLog {
 
   int get totalReps => sets.fold(0, (sum, set) => sum + set.reps);
 
+  /// Meilleure série de l'exercice, au sens du 1RM estimé.
+  ///
+  /// C'est la série de travail la plus représentative : elle n'est pas
+  /// faussée par une série d'échauffement ou une série dégressive.
+  ExerciseSet? get bestSet {
+    if (sets.isEmpty) return null;
+    return sets.reduce(
+      (best, set) => set.estimatedOneRepMax > best.estimatedOneRepMax ? set : best,
+    );
+  }
+
+  /// 1RM estimé de la meilleure série (0 si aucune série).
+  double get bestEstimatedOneRepMax => bestSet?.estimatedOneRepMax ?? 0;
+
   ExerciseLog copyWith({
     String? id,
     String? exerciseId,

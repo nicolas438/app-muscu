@@ -35,6 +35,20 @@ class ExerciseSet {
 
   double get volume => weight * reps;
 
+  /// 1RM estimé (charge maximale théorique sur une répétition), formule d'Epley.
+  ///
+  /// Permet de comparer des séries de charges et de répétitions différentes :
+  /// 80 kg × 10 (≈ 106,7 kg) est plus performant que 85 kg × 5 (≈ 99,2 kg).
+  double get estimatedOneRepMax => estimateOneRepMax(weight, reps);
+
+  /// Formule d'Epley : charge × (1 + reps / 30). Une série d'une seule
+  /// répétition vaut exactement sa charge.
+  static double estimateOneRepMax(double weight, int reps) {
+    if (reps <= 0 || weight <= 0) return 0;
+    if (reps == 1) return weight;
+    return weight * (1 + reps / 30);
+  }
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,

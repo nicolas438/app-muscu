@@ -225,6 +225,7 @@ class StorageService {
           data.add({
             'date': workout.date,
             'maxWeight': log.maxWeight,
+            'bestOneRepMax': log.bestEstimatedOneRepMax,
             'totalVolume': log.totalVolume,
             'totalReps': log.totalReps,
             'sets': log.sets.length,

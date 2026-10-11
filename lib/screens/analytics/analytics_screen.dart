@@ -1,12 +1,41 @@
+import 'dart:math' as math;
+
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
-import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
-import 'package:fl_chart/fl_chart.dart';
-import '../../theme/app_theme.dart';
+import 'package:provider/provider.dart';
+import '../../models/models.dart';
 import '../../providers/providers.dart';
+import '../../theme/app_theme.dart';
+import '../../utils/format.dart';
 import '../../widgets/widgets.dart';
 
+/// Échelle de temps des statistiques.
+enum _PeriodType { week, month, all }
+
+/// Indicateur suivi sur le graphique de progression.
+enum _Metric { maxWeight, oneRepMax }
+
+/// Performance d'un exercice lors d'une séance.
+class _ExercisePoint {
+  final DateTime date;
+  final double maxWeight;
+  final double oneRepMax;
+  final int sets;
+
+  const _ExercisePoint({
+    required this.date,
+    required this.maxWeight,
+    required this.oneRepMax,
+    required this.sets,
+  });
+
+  double valueOf(_Metric metric) => metric == _Metric.maxWeight ? maxWeight : oneRepMax;
+}
+
+/// Onglet « Stats » : volume d'entraînement par période et progression
+/// d'un exercice, comparée à la période précédente.
 class AnalyticsScreen extends StatefulWidget {
   const AnalyticsScreen({super.key});
 
@@ -15,823 +44,389 @@ class AnalyticsScreen extends StatefulWidget {
 }
 
 class _AnalyticsScreenState extends State<AnalyticsScreen> {
+  _PeriodType _periodType = _PeriodType.month;
+
+  /// Date de référence de la période affichée (semaine ou mois la contenant).
+  DateTime _anchor = DateTime.now();
+
   String? _selectedExercise;
-  int _selectedMonthOffset = 0; // 0 = current month, -1 = last month, etc.
-  String _periodType = 'month'; // 'week', 'month', 'all'
-  List<DateTimeRange> _monthWeeks = [];
-  int _selectedWeekIndex = 0;
+  _Metric _metric = _Metric.maxWeight;
 
-  DateTime get _selectedMonth {
-    final now = DateTime.now();
-    return DateTime(now.year, now.month + _selectedMonthOffset);
-  }
+  // ---------------------------------------------------------------------------
+  // Périodes
+  // ---------------------------------------------------------------------------
 
-  int _indexOfTodayInWeeks(List<DateTimeRange> weeks) {
-    final today = DateTime.now();
-    for (var i = 0; i < weeks.length; i++) {
-      final w = weeks[i];
-      if (!today.isBefore(w.start) && !today.isAfter(w.end)) return i;
-    }
-    return 0;
-  }
-
-  void _changeMonthOffset(int delta) {
-    setState(() {
-      _selectedMonthOffset += delta;
-      _monthWeeks = _computeWeeksForMonth(_selectedMonth);
-      // If we're in week view and we moved to the current month, select the week containing today
-      final now = DateTime.now();
-      final isCurr = _selectedMonth.year == now.year && _selectedMonth.month == now.month;
-      if (_periodType == 'week') {
-        if (isCurr) {
-          _selectedWeekIndex = _indexOfTodayInWeeks(_monthWeeks);
-        } else {
-          // clamp to available weeks
-          if (_monthWeeks.isEmpty) _selectedWeekIndex = 0;
-          else _selectedWeekIndex = _selectedWeekIndex.clamp(0, _monthWeeks.length - 1);
-        }
-      }
-    });
-  }
-
-  List<DateTimeRange> _computeWeeksForMonth(DateTime month) {
-    final first = DateTime(month.year, month.month, 1);
-    final last = DateTime(month.year, month.month + 1, 0);
-
-    // Find the Monday on or before the first day
-    final firstWeekStart = first.subtract(Duration(days: (first.weekday - 1)));
-
-    final weeks = <DateTimeRange>[];
-    DateTime currentStart = firstWeekStart;
-    while (currentStart.isBefore(last) || currentStart.isAtSameMomentAs(last)) {
-      final currentEnd = currentStart.add(const Duration(days: 6));
-      final rangeStart = currentStart.isBefore(first) ? first : currentStart;
-      final rangeEnd = currentEnd.isAfter(last) ? last : currentEnd;
-      weeks.add(DateTimeRange(start: rangeStart, end: rangeEnd));
-      currentStart = currentStart.add(const Duration(days: 7));
-    }
-
-    return weeks;
-  }
-
-  DateTimeRange get _selectedPeriod {
-    final now = DateTime.now();
+  DateTimeRange _periodFor(DateTime anchor, List<CompletedWorkout> workouts) {
     switch (_periodType) {
-      case 'week':
-        if (_monthWeeks.isEmpty) {
-          // fallback: week containing today
-          final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
-          final start = DateTime(startOfWeek.year, startOfWeek.month, startOfWeek.day);
-          return DateTimeRange(start: start, end: now);
-        }
-        final idx = _selectedWeekIndex.clamp(0, _monthWeeks.length - 1);
-        return _monthWeeks[idx];
-      case 'month':
+      case _PeriodType.week:
+        final monday = UserStreak.getStartOfWeek(anchor);
         return DateTimeRange(
-          start: DateTime(_selectedMonth.year, _selectedMonth.month, 1),
-          end: DateTime(_selectedMonth.year, _selectedMonth.month + 1, 0),
+          start: monday,
+          end: DateTime(monday.year, monday.month, monday.day + 6),
         );
-      case 'all':
-      default:
+      case _PeriodType.month:
         return DateTimeRange(
-          start: DateTime(2020), // A date far back
-          end: now,
+          start: DateTime(anchor.year, anchor.month, 1),
+          end: DateTime(anchor.year, anchor.month + 1, 0),
         );
+      case _PeriodType.all:
+        final now = DateTime.now();
+        final first = workouts.isEmpty ? now : workouts.last.date;
+        return DateTimeRange(start: DateTime(first.year, first.month, first.day), end: now);
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Statistiques'),
-        automaticallyImplyLeading: false,
-      ),
-      body: Consumer<WorkoutProvider>(
-        builder: (context, provider, _) {
-          final exerciseNames = provider.getAllExerciseNames();
-          final monthStats = provider.getMonthlyStats(_selectedMonth.year, _selectedMonth.month);
-
-          if (provider.completedWorkouts.isEmpty) {
-            return EmptyState(
-              icon: LucideIcons.chart_bar,
-              title: 'Pas encore de données',
-              subtitle: 'Complète des séances pour voir tes statistiques',
-            );
-          }
-
-          // Vérifier si on est sur le mois actuel
-          final now = DateTime.now();
-          final isCurrentMonth = _selectedMonth.year == now.year && _selectedMonth.month == now.month;
-
-          // Ensure month weeks are computed for the selected month
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            final weeks = _computeWeeksForMonth(_selectedMonth);
-            if (mounted && (weeks.length != _monthWeeks.length || _monthWeeks.isEmpty)) {
-              setState(() {
-                _monthWeeks = weeks;
-                if (_selectedWeekIndex >= _monthWeeks.length) _selectedWeekIndex = 0;
-                // if currently in week view and selected week is outside, clamp
-              });
-            }
-          });
-
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Month Selector (always visible)
-                // Navigation limited: earliest month is Jan 2026.
-                Builder(builder: (context) {
-                  final earliest = DateTime(2026, 1, 1);
-                  final selectedNormalized = DateTime(_selectedMonth.year, _selectedMonth.month);
-                  final canPrevious = selectedNormalized.isAfter(earliest);
-                  final canNext = _selectedMonthOffset < 0;
-
-                  return _MonthSelector(
-                    selectedMonth: _selectedMonth,
-                    onPrevious: canPrevious ? () => _changeMonthOffset(-1) : null,
-                    onNext: canNext ? () => _changeMonthOffset(1) : null,
-                  );
-                }),
-                const SizedBox(height: 12),
-
-                // Period Type Selector (always visible) — choose Month / Week / All
-                // Only allow week/all when viewing the current month
-                _PeriodTypeSelector(
-                  selectedType: _periodType,
-                  allowWeekAndAll: isCurrentMonth,
-                  onTypeChanged: (type) => setState(() {
-                    // If the selected month is not the current month, force 'month'
-                    if (!isCurrentMonth) {
-                      _periodType = 'month';
-                      return;
-                    }
-
-                    _periodType = type;
-                    // when switching to week, compute weeks and default to current week
-                    if (type == 'week') {
-                      _monthWeeks = _computeWeeksForMonth(_selectedMonth);
-                      final now = DateTime.now();
-                      final isCurr = _selectedMonth.year == now.year && _selectedMonth.month == now.month;
-                      if (isCurr) {
-                        _selectedWeekIndex = _indexOfTodayInWeeks(_monthWeeks);
-                      } else {
-                        _selectedWeekIndex = 0;
-                      }
-                    }
-                  }),
-                ),
-                const SizedBox(height: 12),
-
-                // If week selected, show week-in-month selector
-                if (_periodType == 'week') ...[
-                  const SizedBox(height: 8),
-                  _WeekSelector(
-                    weeks: _monthWeeks,
-                    selectedIndex: _selectedWeekIndex,
-                    onChanged: (idx) => setState(() => _selectedWeekIndex = idx),
-                  ),
-                ],
-
-                // Stats Cards
-                _MonthlyStatsCards(
-                  stats: _periodType == 'month'
-                      ? monthStats
-                      : provider.getStatsForPeriod(_selectedPeriod),
-                ),
-                const SizedBox(height: 24),
-
-                // Exercise Selector
-                const Text(
-                  'Progression par exercice',
-                  style: TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                if (exerciseNames.isEmpty)
-                  const Text(
-                    'Aucun exercice enregistré',
-                    style: TextStyle(color: AppColors.textSecondary),
-                  )
-                else ...[
-                  // Exercise Dropdown
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    decoration: BoxDecoration(
-                      color: AppColors.surface,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        isExpanded: true,
-                        value: _selectedExercise,
-                        hint: const Text(
-                          'Sélectionne un exercice',
-                          style: TextStyle(color: AppColors.textSecondary),
-                        ),
-                        dropdownColor: AppColors.surface,
-                        items: exerciseNames.map((name) {
-                          return DropdownMenuItem(
-                            value: name,
-                            child: Text(
-                              name,
-                              style: const TextStyle(color: AppColors.textPrimary),
-                            ),
-                          );
-                        }).toList(),
-                        onChanged: (value) {
-                          setState(() => _selectedExercise = value);
-                        },
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-
-                  // Chart
-                  if (_selectedExercise != null)
-                    _ExerciseChart(
-                      exerciseName: _selectedExercise!,
-                      provider: provider,
-                      period: _selectedPeriod,
-                    ),
-                ],
-
-                const SizedBox(height: 24),
-
-                // Comparison Section
-                if (_selectedExercise != null)
-                  _ComparisonSection(
-                    exerciseName: _selectedExercise!,
-                    provider: provider,
-                    period: _selectedPeriod,
-                  ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _PeriodTypeSelector extends StatelessWidget {
-  final String selectedType;
-  final bool allowWeekAndAll;
-  final Function(String) onTypeChanged;
-
-  const _PeriodTypeSelector({
-    required this.selectedType,
-    required this.onTypeChanged,
-    this.allowWeekAndAll = true,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          _PeriodTypeButton(
-            label: 'Semaine',
-            isSelected: selectedType == 'week',
-            onTap: allowWeekAndAll ? () => onTypeChanged('week') : () {},
-            isDisabled: !allowWeekAndAll,
-          ),
-          _PeriodTypeButton(
-            label: 'Mois',
-            isSelected: selectedType == 'month',
-            onTap: () => onTypeChanged('month'),
-          ),
-          _PeriodTypeButton(
-            label: 'Tout',
-            isSelected: selectedType == 'all',
-            onTap: allowWeekAndAll ? () => onTypeChanged('all') : () {},
-            isDisabled: !allowWeekAndAll,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PeriodTypeButton extends StatelessWidget {
-  final String label;
-  final bool isSelected;
-  final VoidCallback onTap;
-  final bool isDisabled;
-
-  const _PeriodTypeButton({
-    required this.label,
-    required this.isSelected,
-    required this.onTap,
-    this.isDisabled = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Opacity(
-        opacity: isDisabled ? 0.5 : 1.0,
-        child: GestureDetector(
-          onTap: isDisabled ? null : onTap,
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            decoration: BoxDecoration(
-              color: isSelected ? AppColors.primary : Colors.transparent,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Center(
-              child: Text(
-                label,
-                style: TextStyle(
-                  color: isSelected ? Colors.white : AppColors.textSecondary,
-                  fontSize: 14,
-                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _MonthSelector extends StatelessWidget {
-  final DateTime selectedMonth;
-  final VoidCallback? onPrevious;
-  final VoidCallback? onNext;
-
-  const _MonthSelector({
-    required this.selectedMonth,
-    this.onPrevious,
-    this.onNext,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final formatter = DateFormat('MMMM yyyy', 'fr_FR');
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          IconButton(
-            icon: const Icon(LucideIcons.chevron_left),
-            color: AppColors.textSecondary,
-            onPressed: onPrevious,
-          ),
-          Text(
-            formatter.format(selectedMonth).capitalize(),
-            style: const TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          IconButton(
-            icon: const Icon(LucideIcons.chevron_right),
-            color: onNext != null ? AppColors.textSecondary : AppColors.textTertiary,
-            onPressed: onNext,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MonthlyStatsCards extends StatelessWidget {
-  final Map<String, dynamic> stats;
-
-  const _MonthlyStatsCards({required this.stats});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: StatCard(
-            title: 'Séances',
-            value: '${stats['totalWorkouts']}',
-            icon: LucideIcons.calendar_check,
-            iconColor: AppColors.success,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: StatCard(
-            title: 'Séries',
-            value: '${stats['totalSets']}',
-            icon: LucideIcons.layers,
-            iconColor: AppColors.warning,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _WeekSelector extends StatelessWidget {
-  final List<DateTimeRange> weeks;
-  final int selectedIndex;
-  final Function(int) onChanged;
-
-  const _WeekSelector({required this.weeks, required this.selectedIndex, required this.onChanged});
-
-  String _formatRangeShort(DateTimeRange r) {
-    final df = DateFormat('d MMM', 'fr_FR');
-    return '${df.format(r.start)} - ${df.format(r.end)}';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (weeks.isEmpty) return const SizedBox.shrink();
-
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: List.generate(weeks.length, (i) {
-            final label = 'S${i + 1} • ${_formatRangeShort(weeks[i])}';
-            final selected = i == selectedIndex;
-            return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 6),
-              child: ChoiceChip(
-                label: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                  child: Text(
-                    label,
-                    style: TextStyle(
-                      color: selected ? Colors.white : AppColors.textPrimary,
-                      fontSize: 13,
-                    ),
-                  ),
-                ),
-                selected: selected,
-                onSelected: (_) => onChanged(i),
-                selectedColor: AppColors.primary,
-                backgroundColor: AppColors.surface,
-                elevation: 0,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-            );
-          }),
-        ),
-      ),
-    );
-  }
-}
-
-class _ExerciseChart extends StatefulWidget {
-  final String exerciseName;
-  final WorkoutProvider provider;
-  final DateTimeRange period;
-
-  const _ExerciseChart({
-    required this.exerciseName,
-    required this.provider,
-    required this.period,
-  });
-
-  @override
-  State<_ExerciseChart> createState() => _ExerciseChartState();
-}
-
-class _ExerciseChartState extends State<_ExerciseChart> {
-  List<Map<String, dynamic>> _data = [];
-  bool _isLoading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadData();
-  }
-
-  @override
-  void didUpdateWidget(covariant _ExerciseChart oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    final periodChanged = oldWidget.period.start != widget.period.start ||
-        oldWidget.period.end != widget.period.end;
-
-    if (oldWidget.exerciseName != widget.exerciseName || periodChanged) {
-      _loadData();
+  /// Période précédente de même nature, ou `null` pour « Tout ».
+  DateTimeRange? _previousPeriod(List<CompletedWorkout> workouts) {
+    switch (_periodType) {
+      case _PeriodType.week:
+        return _periodFor(_anchor.subtract(const Duration(days: 7)), workouts);
+      case _PeriodType.month:
+        return _periodFor(DateTime(_anchor.year, _anchor.month - 1, 1), workouts);
+      case _PeriodType.all:
+        return null;
     }
   }
 
-  Future<void> _loadData() async {
-    setState(() => _isLoading = true);
-    final data = await widget.provider.getExerciseProgression(
-      widget.exerciseName,
-      startDate: widget.period.start,
-      endDate: widget.period.end,
-    );
+  void _shift(int direction) {
     setState(() {
-      _data = data;
-      _isLoading = false;
+      _anchor = _periodType == _PeriodType.week
+          ? _anchor.add(Duration(days: 7 * direction))
+          : DateTime(_anchor.year, _anchor.month + direction, 1);
     });
   }
 
-  @override
-  Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+  String _periodLabel(DateTimeRange period) {
+    switch (_periodType) {
+      case _PeriodType.week:
+        return 'Semaine du ${DateFormat('d MMMM', 'fr_FR').format(period.start)}';
+      case _PeriodType.month:
+        return capitalize(DateFormat('MMMM yyyy', 'fr_FR').format(period.start));
+      case _PeriodType.all:
+        return 'Depuis le ${DateFormat('d MMMM yyyy', 'fr_FR').format(period.start)}';
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Données
+  // ---------------------------------------------------------------------------
+
+  /// Performances de [exerciseName] sur [period], de la plus ancienne à la plus récente.
+  List<_ExercisePoint> _pointsFor(
+    List<CompletedWorkout> workouts,
+    String exerciseName,
+    DateTimeRange period,
+  ) {
+    final start = period.start;
+    final endExclusive = DateTime(period.end.year, period.end.month, period.end.day + 1);
+    final points = <_ExercisePoint>[];
+
+    for (final workout in workouts) {
+      if (workout.date.isBefore(start) || !workout.date.isBefore(endExclusive)) continue;
+      for (final log in workout.exerciseLogs) {
+        if (log.exerciseName != exerciseName || log.sets.isEmpty) continue;
+        points.add(_ExercisePoint(
+          date: workout.date,
+          maxWeight: log.maxWeight,
+          oneRepMax: log.bestEstimatedOneRepMax,
+          sets: log.sets.length,
+        ));
+      }
     }
 
-    if (_data.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.all(32),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: const Center(
-          child: Text(
-            'Aucune donnée pour cet exercice',
-            style: TextStyle(color: AppColors.textSecondary),
+    points.sort((a, b) => a.date.compareTo(b.date));
+    return points;
+  }
+
+  /// Exercice affiché par défaut : le dernier réalisé.
+  String? _defaultExercise(List<CompletedWorkout> workouts) {
+    for (final workout in workouts) {
+      for (final log in workout.exerciseLogs) {
+        if (log.sets.isNotEmpty) return log.exerciseName;
+      }
+    }
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = context.watch<WorkoutProvider>();
+    final workouts = provider.completedWorkouts;
+
+    if (workouts.every((w) => w.totalSets == 0)) {
+      return const Scaffold(
+        body: SafeArea(
+          child: EmptyState(
+            icon: LucideIcons.chart_line,
+            title: 'Pas encore de statistiques',
+            message: 'Termine une première séance : ta progression s\'affichera ici.',
           ),
         ),
       );
     }
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(LucideIcons.trending_up, color: AppColors.primary, size: 20),
-              const SizedBox(width: 8),
-              const Text(
-                'Poids maximum',
-                style: TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
+    final period = _periodFor(_anchor, workouts);
+    final previous = _previousPeriod(workouts);
+    final stats = provider.getStatsForPeriod(period);
+
+    final now = DateTime.now();
+    final nextStart = _periodType == _PeriodType.week
+        ? period.start.add(const Duration(days: 7))
+        : DateTime(period.start.year, period.start.month + 1, 1);
+    final canGoNext = _periodType != _PeriodType.all && !nextStart.isAfter(now);
+    final canGoPrevious = _periodType != _PeriodType.all && workouts.last.date.isBefore(period.start);
+
+    final exerciseName = _selectedExercise ?? _defaultExercise(workouts);
+    final points = exerciseName == null ? <_ExercisePoint>[] : _pointsFor(workouts, exerciseName, period);
+    final previousPoints = (exerciseName == null || previous == null)
+        ? <_ExercisePoint>[]
+        : _pointsFor(workouts, exerciseName, previous);
+
+    return Scaffold(
+      body: SafeArea(
+        bottom: false,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(AppSpace.page, AppSpace.l, AppSpace.page, AppSpace.xxl),
+          children: [
+            const Text('Statistiques', style: AppText.display),
+            const SizedBox(height: AppSpace.l),
+
+            _Segmented<_PeriodType>(
+              value: _periodType,
+              options: const {
+                _PeriodType.week: 'Semaine',
+                _PeriodType.month: 'Mois',
+                _PeriodType.all: 'Tout',
+              },
+              onChanged: (type) => setState(() {
+                _periodType = type;
+                _anchor = DateTime.now();
+              }),
+            ),
+            const SizedBox(height: AppSpace.m),
+
+            // Navigation entre périodes.
+            Row(
+              children: [
+                IconButton(
+                  onPressed: canGoPrevious ? () => _shift(-1) : null,
+                  tooltip: 'Période précédente',
+                  icon: const Icon(LucideIcons.chevron_left),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          SizedBox(
-            height: 200,
-            child: LineChart(
-              LineChartData(
-                gridData: FlGridData(
-                  show: true,
-                  drawVerticalLine: false,
-                  horizontalInterval: 10,
-                  getDrawingHorizontalLine: (value) {
-                    return FlLine(
-                      color: AppColors.surfaceLight,
-                      strokeWidth: 1,
-                    );
-                  },
+                Expanded(
+                  child: Text(
+                    _periodLabel(period),
+                    style: AppText.heading,
+                    textAlign: TextAlign.center,
+                  ),
                 ),
-                titlesData: FlTitlesData(
-                  leftTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 40,
-                      getTitlesWidget: (value, meta) {
-                        return Text(
-                          '${value.toInt()}kg',
-                          style: const TextStyle(
-                            color: AppColors.textTertiary,
-                            fontSize: 10,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 38,
-                      getTitlesWidget: (value, meta) {
-                        if (value.toInt() >= _data.length) return const SizedBox();
-                        final date = _data[value.toInt()]['date'] as DateTime;
-                        return Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: Text(
-                            DateFormat('d/M').format(date),
-                            style: const TextStyle(
-                              color: AppColors.textTertiary,
-                              fontSize: 10,
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                IconButton(
+                  onPressed: canGoNext ? () => _shift(1) : null,
+                  tooltip: 'Période suivante',
+                  icon: const Icon(LucideIcons.chevron_right),
                 ),
-                borderData: FlBorderData(show: false),
-                lineBarsData: [
-                  LineChartBarData(
-                    spots: _data.asMap().entries.map((entry) {
-                      return FlSpot(
-                        entry.key.toDouble(),
-                        (entry.value['maxWeight'] as double),
-                      );
-                    }).toList(),
-                    isCurved: true,
-                    color: AppColors.primary,
-                    barWidth: 3,
-                    dotData: FlDotData(
-                      show: true,
-                      getDotPainter: (spot, percent, barData, index) {
-                        return FlDotCirclePainter(
-                          radius: 4,
-                          color: AppColors.primary,
-                          strokeWidth: 2,
-                          strokeColor: Colors.white,
-                        );
-                      },
-                    ),
-                    belowBarData: BarAreaData(
-                      show: true,
-                      color: AppColors.primary.withValues(alpha: 0.1),
-                    ),
-                  ),
+              ],
+            ),
+            const SizedBox(height: AppSpace.m),
+
+            Panel(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpace.l, vertical: AppSpace.xl),
+              child: StatRow(
+                figures: [
+                  StatFigure(value: '${stats.totalWorkouts}', label: stats.totalWorkouts > 1 ? 'séances' : 'séance'),
+                  StatFigure(value: '${stats.totalSets}', label: stats.totalSets > 1 ? 'séries' : 'série'),
+                  StatFigure(value: formatVolume(stats.totalVolume), label: 'soulevés'),
                 ],
-                lineTouchData: LineTouchData(
-                  touchTooltipData: LineTouchTooltipData(
-                    getTooltipItems: (spots) {
-                      return spots.map((spot) {
-                        final data = _data[spot.spotIndex];
-                        return LineTooltipItem(
-                          '${spot.y.toStringAsFixed(1)} kg\n${data['totalReps']} reps',
-                          const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        );
-                      }).toList();
-                    },
-                  ),
-                ),
               ),
             ),
-          ),
-        ],
+            const SizedBox(height: AppSpace.xxl),
+
+            // Progression d'un exercice.
+            SectionTitle(
+              'Progression',
+              trailing: _Segmented<_Metric>(
+                compact: true,
+                value: _metric,
+                options: const {_Metric.maxWeight: 'Charge', _Metric.oneRepMax: '1RM estimé'},
+                onChanged: (metric) => setState(() => _metric = metric),
+              ),
+            ),
+            _ExerciseSelector(
+              selected: exerciseName,
+              options: provider.getAllExerciseNames(),
+              onChanged: (name) => setState(() => _selectedExercise = name),
+            ),
+            const SizedBox(height: AppSpace.m),
+            Panel(
+              padding: const EdgeInsets.fromLTRB(AppSpace.s, AppSpace.xl, AppSpace.l, AppSpace.m),
+              child: points.isEmpty
+                  ? const SizedBox(
+                      height: 160,
+                      child: Center(
+                        child: Text('Pas de séance sur cette période.', style: AppText.label),
+                      ),
+                    )
+                  : _ProgressChart(points: points, metric: _metric),
+            ),
+            if (points.isNotEmpty) ...[
+              const SizedBox(height: AppSpace.m),
+              _ComparisonPanel(
+                current: points,
+                previous: previousPoints,
+                metric: _metric,
+                hasPreviousPeriod: previous != null,
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
 }
 
-class _ComparisonSection extends StatelessWidget {
-  final String exerciseName;
-  final WorkoutProvider provider;
-  final DateTimeRange period;
+/// Contrôle segmenté générique.
+class _Segmented<T> extends StatelessWidget {
+  final T value;
+  final Map<T, String> options;
+  final ValueChanged<T> onChanged;
+  final bool compact;
 
-  const _ComparisonSection({
-    required this.exerciseName,
-    required this.provider,
-    required this.period,
+  const _Segmented({
+    required this.value,
+    required this.options,
+    required this.onChanged,
+    this.compact = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    // Calculate previous period with same duration
-    final duration = period.end.difference(period.start);
-    final previousPeriodEnd = period.start.subtract(const Duration(days: 1));
-    final previousPeriodStart = previousPeriodEnd.subtract(duration);
-    
-    // Get workouts for current period
-    final currentPeriodWorkouts = provider.completedWorkouts.where((w) {
-      return w.date.isAfter(period.start.subtract(const Duration(days: 1))) &&
-             w.date.isBefore(period.end.add(const Duration(days: 1)));
-    }).toList();
-
-    // Get workouts for previous period
-    final previousPeriodWorkouts = provider.completedWorkouts.where((w) {
-      return w.date.isAfter(previousPeriodStart.subtract(const Duration(days: 1))) &&
-             w.date.isBefore(previousPeriodEnd.add(const Duration(days: 1)));
-    }).toList();
-
-    // Calculate max weight for selected exercise
-    double currentMax = 0;
-    double previousMax = 0;
-
-    for (var workout in currentPeriodWorkouts) {
-      for (var log in workout.exerciseLogs) {
-        if (log.exerciseName == exerciseName && log.maxWeight > currentMax) {
-          currentMax = log.maxWeight;
-        }
-      }
-    }
-
-    for (var workout in previousPeriodWorkouts) {
-      for (var log in workout.exerciseLogs) {
-        if (log.exerciseName == exerciseName && log.maxWeight > previousMax) {
-          previousMax = log.maxWeight;
-        }
-      }
-    }
-
-    final diff = currentMax - previousMax;
-    final diffPercent = previousMax > 0 ? (diff / previousMax * 100) : 0;
-    
-    // Format labels based on period
-    final formatter = DateFormat('d MMM', 'fr_FR');
-    final currentLabel = '${formatter.format(period.start)} - ${formatter.format(period.end)}';
-    final previousLabel = '${formatter.format(previousPeriodStart)} - ${formatter.format(previousPeriodEnd)}';
+    final segments = <Widget>[
+      for (final entry in options.entries)
+        _segment(entry.key, entry.value),
+    ];
 
     return Container(
-      padding: const EdgeInsets.all(20),
+      height: compact ? 34 : 44,
+      padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
+        color: AppColors.surfaceMuted,
+        borderRadius: BorderRadius.circular(AppRadius.m),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
+        mainAxisSize: compact ? MainAxisSize.min : MainAxisSize.max,
+        children: compact ? segments : segments.map((s) => Expanded(child: s)).toList(),
+      ),
+    );
+  }
+
+  Widget _segment(T key, String label) {
+    final selected = key == value;
+    return GestureDetector(
+      onTap: () => onChanged(key),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: EdgeInsets.symmetric(horizontal: compact ? AppSpace.m : AppSpace.s),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: selected ? AppColors.surface : Colors.transparent,
+          borderRadius: BorderRadius.circular(AppRadius.s),
+        ),
+        child: Text(
+          label,
+          style: AppText.label.copyWith(
+            color: selected ? AppColors.ink : AppColors.inkSoft,
+            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+            fontSize: compact ? 12 : 13,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Champ de sélection de l'exercice, ouvrant une liste avec recherche.
+class _ExerciseSelector extends StatelessWidget {
+  final String? selected;
+  final List<String> options;
+  final ValueChanged<String> onChanged;
+
+  const _ExerciseSelector({required this.selected, required this.options, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Panel(
+      onTap: () => _open(context),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpace.l, vertical: AppSpace.m + 2),
+      child: Row(
         children: [
-          const Row(
-            children: [
-              Icon(LucideIcons.git_compare, color: AppColors.accent, size: 20),
-              SizedBox(width: 8),
-              Text(
-                'Comparaison',
-                style: TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
+          const Icon(LucideIcons.dumbbell, size: 18, color: AppColors.inkSoft),
+          const SizedBox(width: AppSpace.m),
+          Expanded(
+            child: Text(selected ?? 'Choisir un exercice', style: AppText.heading),
           ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: _ComparisonCard(
-                  label: previousLabel,
-                  value: '${previousMax.toStringAsFixed(1)} kg',
-                  isOld: true,
-                ),
+          const Icon(LucideIcons.chevron_down, size: 18, color: AppColors.inkSoft),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _open(BuildContext context) async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => _ExercisePickerList(options: options, selected: selected),
+    );
+    if (choice != null) onChanged(choice);
+  }
+}
+
+class _ExercisePickerList extends StatefulWidget {
+  final List<String> options;
+  final String? selected;
+
+  const _ExercisePickerList({required this.options, required this.selected});
+
+  @override
+  State<_ExercisePickerList> createState() => _ExercisePickerListState();
+}
+
+class _ExercisePickerListState extends State<_ExercisePickerList> {
+  String _query = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final filtered = widget.options
+        .where((name) => name.toLowerCase().contains(_query.toLowerCase()))
+        .toList();
+
+    return SizedBox(
+      height: MediaQuery.of(context).size.height * 0.75,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpace.xl),
+            child: TextField(
+              onChanged: (value) => setState(() => _query = value.trim()),
+              decoration: const InputDecoration(
+                hintText: 'Rechercher un exercice',
+                prefixIcon: Icon(LucideIcons.search, size: 20, color: AppColors.inkFaint),
               ),
-              const SizedBox(width: 12),
-              const Icon(LucideIcons.arrow_right, color: AppColors.textTertiary),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _ComparisonCard(
-                  label: currentLabel,
-                  value: '${currentMax.toStringAsFixed(1)} kg',
-                  isOld: false,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: diff >= 0
-                  ? AppColors.success.withValues(alpha: 0.1)
-                  : AppColors.error.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(12),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+          ),
+          const SizedBox(height: AppSpace.s),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpace.m),
               children: [
-                Icon(
-                  diff >= 0 ? LucideIcons.trending_up : LucideIcons.trending_down,
-                  color: diff >= 0 ? AppColors.success : AppColors.error,
-                  size: 20,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  diff >= 0
-                      ? '+${diff.toStringAsFixed(1)} kg (+${diffPercent.toStringAsFixed(1)}%)'
-                      : '${diff.toStringAsFixed(1)} kg (${diffPercent.toStringAsFixed(1)}%)',
-                  style: TextStyle(
-                    color: diff >= 0 ? AppColors.success : AppColors.error,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
+                for (final name in filtered)
+                  ListTile(
+                    title: Text(name, style: AppText.heading),
+                    trailing: name == widget.selected
+                        ? const Icon(LucideIcons.check, color: AppColors.primary)
+                        : null,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.s)),
+                    onTap: () => Navigator.pop(context, name),
                   ),
-                ),
               ],
             ),
           ),
@@ -841,53 +436,186 @@ class _ComparisonSection extends StatelessWidget {
   }
 }
 
-class _ComparisonCard extends StatelessWidget {
-  final String label;
-  final String value;
-  final bool isOld;
+/// Courbe de progression d'un exercice, séance par séance.
+class _ProgressChart extends StatelessWidget {
+  final List<_ExercisePoint> points;
+  final _Metric metric;
 
-  const _ComparisonCard({
-    required this.label,
-    required this.value,
-    required this.isOld,
-  });
+  const _ProgressChart({required this.points, required this.metric});
+
+  /// Pas de graduation « rond » (1, 2, 2,5, 5 ou 10 × puissance de 10).
+  static double _niceStep(double range) {
+    if (range <= 0) return 5;
+    final raw = range / 4;
+    final magnitude = math.pow(10, (math.log(raw) / math.ln10).floor()).toDouble();
+    for (final factor in [1.0, 2.0, 2.5, 5.0, 10.0]) {
+      if (raw <= factor * magnitude) return factor * magnitude;
+    }
+    return 10 * magnitude;
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: isOld ? AppColors.surfaceLight : AppColors.primary.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(12),
-        border: isOld ? null : Border.all(color: AppColors.primary, width: 1),
-      ),
-      child: Column(
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              color: isOld ? AppColors.textSecondary : AppColors.primary,
-              fontSize: 12,
+    final values = points.map((p) => p.valueOf(metric)).toList();
+    final minValue = values.reduce(math.min);
+    final maxValue = values.reduce(math.max);
+    final step = _niceStep(maxValue - minValue);
+    final minY = (minValue / step).floor() * step - (maxValue == minValue ? step : 0);
+    final maxY = (maxValue / step).ceil() * step + (maxValue == minValue ? step : 0);
+
+    // Au plus cinq dates sous l'axe pour rester lisible.
+    final int labelEvery = math.max(1, (points.length / 5).ceil());
+
+    return SizedBox(
+      height: 200,
+      child: LineChart(
+        LineChartData(
+          minY: math.max(0, minY),
+          maxY: maxY,
+          gridData: FlGridData(
+            show: true,
+            drawVerticalLine: false,
+            horizontalInterval: step,
+            getDrawingHorizontalLine: (_) => FlLine(color: AppColors.line, strokeWidth: 1),
+          ),
+          borderData: FlBorderData(show: false),
+          titlesData: FlTitlesData(
+            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            leftTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                reservedSize: 40,
+                interval: step,
+                getTitlesWidget: (value, meta) => Padding(
+                  padding: const EdgeInsets.only(right: AppSpace.s),
+                  child: Text(
+                    formatWeight(value),
+                    style: AppText.caption,
+                    textAlign: TextAlign.right,
+                  ),
+                ),
+              ),
+            ),
+            bottomTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                reservedSize: 28,
+                interval: 1,
+                getTitlesWidget: (value, meta) {
+                  final index = value.round();
+                  if (index < 0 || index >= points.length || index % labelEvery != 0) {
+                    return const SizedBox.shrink();
+                  }
+                  return Padding(
+                    padding: const EdgeInsets.only(top: AppSpace.s),
+                    child: Text(DateFormat('d/M').format(points[index].date), style: AppText.caption),
+                  );
+                },
+              ),
             ),
           ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: TextStyle(
-              color: isOld ? AppColors.textPrimary : AppColors.primary,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
+          lineTouchData: LineTouchData(
+            touchTooltipData: LineTouchTooltipData(
+              getTooltipColor: (_) => AppColors.ink,
+              getTooltipItems: (spots) => spots.map((spot) {
+                final point = points[spot.spotIndex];
+                return LineTooltipItem(
+                  '${formatKg(spot.y)}\n${DateFormat('d MMM', 'fr_FR').format(point.date)}',
+                  AppText.label.copyWith(color: Colors.white, fontWeight: FontWeight.w600),
+                );
+              }).toList(),
             ),
           ),
-        ],
+          lineBarsData: [
+            LineChartBarData(
+              spots: [
+                for (var i = 0; i < points.length; i++) FlSpot(i.toDouble(), values[i]),
+              ],
+              isCurved: true,
+              preventCurveOverShooting: true,
+              color: AppColors.primary,
+              barWidth: 3,
+              dotData: FlDotData(
+                show: true,
+                getDotPainter: (spot, percent, bar, index) => FlDotCirclePainter(
+                  radius: 4,
+                  color: AppColors.surface,
+                  strokeWidth: 2.5,
+                  strokeColor: AppColors.primary,
+                ),
+              ),
+              belowBarData: BarAreaData(
+                show: true,
+                color: AppColors.primary.withValues(alpha: 0.08),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-extension StringExtension on String {
-  String capitalize() {
-    if (isEmpty) return this;
-    return '${this[0].toUpperCase()}${substring(1)}';
+/// Meilleure performance de la période, comparée à la période précédente.
+class _ComparisonPanel extends StatelessWidget {
+  final List<_ExercisePoint> current;
+  final List<_ExercisePoint> previous;
+  final _Metric metric;
+  final bool hasPreviousPeriod;
+
+  const _ComparisonPanel({
+    required this.current,
+    required this.previous,
+    required this.metric,
+    required this.hasPreviousPeriod,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final best = current.map((p) => p.valueOf(metric)).reduce(math.max);
+    final previousBest = previous.isEmpty ? null : previous.map((p) => p.valueOf(metric)).reduce(math.max);
+    final first = current.first.valueOf(metric);
+    final last = current.last.valueOf(metric);
+
+    final String compareLabel;
+    final double? delta;
+    if (previousBest != null) {
+      compareLabel = 'par rapport à la période précédente';
+      delta = best - previousBest;
+    } else if (current.length > 1) {
+      compareLabel = 'entre la première et la dernière séance';
+      delta = last - first;
+    } else {
+      compareLabel = hasPreviousPeriod
+          ? 'aucune séance sur la période précédente'
+          : 'une seule séance pour l\'instant';
+      delta = null;
+    }
+
+    final Color deltaColor = delta == null || delta == 0
+        ? AppColors.inkSoft
+        : (delta > 0 ? AppColors.success : AppColors.record);
+    final String deltaText = delta == null
+        ? '–'
+        : '${delta > 0 ? '+' : delta < 0 ? '−' : ''}${formatKg(delta.abs())}';
+
+    return Panel(
+      child: Row(
+        children: [
+          Expanded(
+            child: StatFigure(
+              value: formatKg(best),
+              label: metric == _Metric.maxWeight ? 'meilleure charge' : 'meilleur 1RM estimé',
+            ),
+          ),
+          Container(width: 1, height: 40, color: AppColors.line),
+          const SizedBox(width: AppSpace.l),
+          Expanded(
+            child: StatFigure(value: deltaText, label: compareLabel, color: deltaColor),
+          ),
+        ],
+      ),
+    );
   }
 }
