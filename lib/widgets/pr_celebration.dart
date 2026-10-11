@@ -142,7 +142,7 @@ class _RecordRevealState extends State<_RecordReveal> with SingleTickerProviderS
 
     final headline = isWeightRecord
         ? formatKg(record.newValue)
-        : '${formatWeight(set.weight)} × ${set.reps}';
+        : '${formatWeight(set.weight)} × ${set.repsLabel}';
 
     final detail = isWeightRecord
         ? 'Ancien record : ${formatKg(record.previousValue)}'

@@ -201,7 +201,7 @@ class SummaryCard extends StatelessWidget {
                                   Text(
                                     record.kind == PersonalRecordKind.heaviestWeight
                                         ? formatKg(record.newValue)
-                                        : '${formatWeight(record.recordSet.weight)} × ${record.recordSet.reps}',
+                                        : '${formatWeight(record.recordSet.weight)} × ${record.recordSet.repsLabel}',
                                     style: AppText.figureM.copyWith(fontSize: 19),
                                   ),
                                   const SizedBox(width: AppSpace.s),
@@ -233,7 +233,7 @@ class SummaryCard extends StatelessWidget {
                             ),
                           ),
                           Text(
-                            '${formatWeight(log.bestSet!.weight)} kg × ${log.bestSet!.reps}',
+                            '${formatWeight(log.bestSet!.weight)} kg × ${log.bestSet!.repsLabel}',
                             style: AppText.figureM.copyWith(fontSize: 19),
                           ),
                         ],

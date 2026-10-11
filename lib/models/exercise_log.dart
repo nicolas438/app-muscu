@@ -9,6 +9,9 @@ class ExerciseLog {
   String? notes;
   final bool isOffSession; // Exercice hors séance
 
+  /// Exercice réalisé un côté à la fois (répétitions gauche et droite).
+  final bool isUnilateral;
+
   ExerciseLog({
     required this.id,
     required this.exerciseId,
@@ -16,6 +19,7 @@ class ExerciseLog {
     List<ExerciseSet>? sets,
     this.notes,
     this.isOffSession = false,
+    this.isUnilateral = false,
   }) : sets = sets ?? [];
 
   factory ExerciseLog.fromExercise(String id, Exercise exercise) {
@@ -40,7 +44,7 @@ class ExerciseLog {
     return done.map((s) => s.weight).reduce((a, b) => a > b ? a : b);
   }
 
-  int get totalReps => completedSets.fold(0, (sum, set) => sum + set.reps);
+  int get totalReps => completedSets.fold(0, (sum, set) => sum + set.totalReps);
 
   /// Meilleure série validée de l'exercice, au sens du 1RM estimé.
   ///
@@ -64,6 +68,7 @@ class ExerciseLog {
     List<ExerciseSet>? sets,
     String? notes,
     bool? isOffSession,
+    bool? isUnilateral,
   }) {
     return ExerciseLog(
       id: id ?? this.id,
@@ -72,6 +77,7 @@ class ExerciseLog {
       sets: sets ?? List.from(this.sets),
       notes: notes ?? this.notes,
       isOffSession: isOffSession ?? this.isOffSession,
+      isUnilateral: isUnilateral ?? this.isUnilateral,
     );
   }
 
@@ -83,6 +89,7 @@ class ExerciseLog {
       'sets': sets.map((s) => s.toJson()).toList(),
       'notes': notes,
       'isOffSession': isOffSession,
+      'isUnilateral': isUnilateral,
     };
   }
 
@@ -97,6 +104,7 @@ class ExerciseLog {
           [],
       notes: json['notes'] as String?,
       isOffSession: json['isOffSession'] as bool? ?? false,
+      isUnilateral: json['isUnilateral'] as bool? ?? false,
     );
   }
 }

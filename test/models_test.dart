@@ -70,6 +70,37 @@ void main() {
     });
   });
 
+  group('Exercices unilatéraux', () {
+    final set = ExerciseSet(
+      id: 'curl',
+      weight: 20,
+      reps: 10,
+      repsRight: 8,
+      setNumber: 1,
+      isCompleted: true,
+    );
+
+    test('le volume compte les deux côtés', () {
+      expect(set.totalReps, 18);
+      expect(set.volume, 360);
+    });
+
+    test('le 1RM se base sur le côté le plus faible', () {
+      expect(set.effectiveReps, 8);
+      expect(set.estimatedOneRepMax, ExerciseSet.estimateOneRepMax(20, 8));
+    });
+
+    test('affichage gauche / droite', () {
+      expect(set.repsLabel, '10 / 8');
+      expect(_set(80, 5).repsLabel, '5');
+    });
+
+    test('les répétitions du côté droit survivent à un aller-retour JSON', () {
+      expect(ExerciseSet.fromJson(set.toJson()).repsRight, 8);
+      expect(ExerciseSet.fromJson(_set(80, 5).toJson()).repsRight, isNull);
+    });
+  });
+
   group('Minuteur de repos', () {
     test('le temps restant ne devient jamais négatif', () {
       final now = DateTime(2026, 10, 11, 20);

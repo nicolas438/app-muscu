@@ -13,7 +13,9 @@ fonctionne sans connexion, y compris à la salle.
 - **Entraînement** : chaque exercice affiche le tableau de ses séries, avec les
   valeurs de la séance précédente ; on coche une série pour la valider (un champ
   laissé vide reprend la valeur précédente). Séries et exercices s'ajoutent ou se
-  retirent à la volée. La séance est sauvegardée en continu : elle peut être mise
+  retirent à la volée. Les exercices unilatéraux (un côté à la fois) ont deux
+  champs de répétitions, gauche et droite ; leur 1RM estimé retient le côté le
+  plus faible. La séance est sauvegardée en continu : elle peut être mise
   en pause et reprise, même après la fermeture de l'application.
 - **Minuteur de repos** : lancé automatiquement à chaque série cochée, réglable
   par exercice, ajustable de ±15 s. À la fin, le téléphone vibre et sonne grâce à

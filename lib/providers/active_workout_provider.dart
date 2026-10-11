@@ -85,7 +85,11 @@ class ActiveWorkoutProvider with ChangeNotifier {
         id: _storage.generateId(),
         exerciseId: exercise.id,
         exerciseName: exercise.name,
-        sets: _plannedSets(previous.isEmpty ? defaultPlannedSets : previous.length),
+        isUnilateral: exercise.isUnilateral,
+        sets: _plannedSets(
+          previous.isEmpty ? defaultPlannedSets : previous.length,
+          unilateral: exercise.isUnilateral,
+        ),
       ));
     }
 
@@ -171,11 +175,15 @@ class ActiveWorkoutProvider with ChangeNotifier {
   ///
   /// Appelée à chaque frappe : l'état est enregistré sans reconstruire
   /// l'écran, le champ de saisie affichant déjà la valeur.
-  void updateSet(int logIndex, int setIndex, {double? weight, int? reps}) {
+  void updateSet(int logIndex, int setIndex, {double? weight, int? reps, int? repsRight}) {
     final log = _log(logIndex);
     if (log == null || setIndex < 0 || setIndex >= log.sets.length) return;
 
-    log.sets[setIndex] = log.sets[setIndex].copyWith(weight: weight, reps: reps);
+    log.sets[setIndex] = log.sets[setIndex].copyWith(
+      weight: weight,
+      reps: reps,
+      repsRight: repsRight,
+    );
     _persist();
   }
 
@@ -188,6 +196,7 @@ class ActiveWorkoutProvider with ChangeNotifier {
     required bool completed,
     double? weight,
     int? reps,
+    int? repsRight,
   }) {
     final log = _log(logIndex);
     if (log == null || setIndex < 0 || setIndex >= log.sets.length) return;
@@ -195,6 +204,7 @@ class ActiveWorkoutProvider with ChangeNotifier {
     log.sets[setIndex] = log.sets[setIndex].copyWith(
       weight: weight,
       reps: reps,
+      repsRight: repsRight,
       isCompleted: completed,
     );
 
@@ -217,6 +227,8 @@ class ActiveWorkoutProvider with ChangeNotifier {
       id: _storage.generateId(),
       weight: last?.weight ?? 0,
       reps: last?.reps ?? 0,
+      // Exercice unilatéral : répétitions du côté droit saisies à part.
+      repsRight: log.isUnilateral ? (last?.repsRight ?? last?.reps ?? 0) : null,
       setNumber: log.sets.length + 1,
     ));
 
@@ -246,13 +258,16 @@ class ActiveWorkoutProvider with ChangeNotifier {
     if (workout == null) return;
 
     final previous = workoutProvider.getPreviousSetsForExercise(exerciseName);
+    final known = workoutProvider.findExerciseByName(exerciseName);
+    final unilateral = known?.isUnilateral ?? false;
     final id = _storage.generateId();
     workout.exerciseLogs.add(ExerciseLog(
       id: id,
-      exerciseId: id,
+      exerciseId: known?.id ?? id,
       exerciseName: exerciseName,
-      sets: _plannedSets(previous.isEmpty ? 1 : previous.length),
+      sets: _plannedSets(previous.isEmpty ? 1 : previous.length, unilateral: unilateral),
       isOffSession: true,
+      isUnilateral: unilateral,
     ));
 
     _persist();
@@ -271,10 +286,19 @@ class ActiveWorkoutProvider with ChangeNotifier {
 
   /// Séries prévues, vides : les valeurs de la séance précédente
   /// s'affichent en indication tant que rien n'est saisi.
-  List<ExerciseSet> _plannedSets(int count) {
+  ///
+  /// Pour un exercice unilatéral, [ExerciseSet.repsRight] vaut 0 au lieu de
+  /// `null` : la série est ainsi identifiée comme réalisée côté par côté.
+  List<ExerciseSet> _plannedSets(int count, {bool unilateral = false}) {
     return [
       for (var i = 0; i < count; i++)
-        ExerciseSet(id: _storage.generateId(), weight: 0, reps: 0, setNumber: i + 1),
+        ExerciseSet(
+          id: _storage.generateId(),
+          weight: 0,
+          reps: 0,
+          repsRight: unilateral ? 0 : null,
+          setNumber: i + 1,
+        ),
     ];
   }
 

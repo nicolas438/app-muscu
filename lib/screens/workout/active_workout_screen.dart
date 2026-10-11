@@ -510,7 +510,7 @@ class _ExerciseCard extends StatelessWidget {
             ),
           ),
 
-          const _SetHeader(),
+          _SetHeader(unilateral: log.isUnilateral),
           for (var i = 0; i < log.sets.length; i++)
             Dismissible(
               key: ValueKey(log.sets[i].id),
@@ -530,6 +530,7 @@ class _ExerciseCard extends StatelessWidget {
                 logIndex: logIndex,
                 setIndex: i,
                 set: log.sets[i],
+                unilateral: log.isUnilateral,
                 previous: i < previousSets.length ? previousSets[i] : null,
               ),
             ),
@@ -553,32 +554,41 @@ class _Cols {
   static const double set = 32;
   static const double weight = 72;
   static const double reps = 60;
+
+  /// Colonne des répétitions d'un exercice unilatéral (lettre G / D + champ).
+  static const double repsUnilateral = 76;
   static const double check = 48;
   static const double gap = AppSpace.s;
 }
 
 class _SetHeader extends StatelessWidget {
-  const _SetHeader();
+  final bool unilateral;
+
+  const _SetHeader({required this.unilateral});
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.only(bottom: AppSpace.xs, right: AppSpace.s),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpace.xs, right: AppSpace.s),
       child: Row(
         children: [
-          SizedBox(width: _Cols.set, child: Text('Série', style: AppText.caption)),
-          Expanded(child: Text('Précédent', style: AppText.caption)),
-          SizedBox(
+          const SizedBox(width: _Cols.set, child: Text('Série', style: AppText.caption)),
+          const Expanded(child: Text('Précédent', style: AppText.caption)),
+          const SizedBox(
             width: _Cols.weight,
             child: Text('kg', style: AppText.caption, textAlign: TextAlign.center),
           ),
-          SizedBox(width: _Cols.gap),
+          const SizedBox(width: _Cols.gap),
           SizedBox(
-            width: _Cols.reps,
-            child: Text('Reps', style: AppText.caption, textAlign: TextAlign.center),
+            width: unilateral ? _Cols.repsUnilateral : _Cols.reps,
+            child: Text(
+              unilateral ? 'Reps G / D' : 'Reps',
+              style: AppText.caption,
+              textAlign: TextAlign.center,
+            ),
           ),
-          SizedBox(width: _Cols.gap),
-          SizedBox(width: _Cols.check),
+          const SizedBox(width: _Cols.gap),
+          const SizedBox(width: _Cols.check),
         ],
       ),
     );
@@ -587,10 +597,14 @@ class _SetHeader extends StatelessWidget {
 
 /// Ligne d'une série : valeurs précédentes en indication, saisie de la
 /// charge et des répétitions, et case de validation.
+///
+/// Pour un exercice unilatéral, la charge reste commune et deux champs de
+/// répétitions, gauche (G) et droite (D), s'empilent dans la colonne.
 class _SetRow extends StatefulWidget {
   final int logIndex;
   final int setIndex;
   final ExerciseSet set;
+  final bool unilateral;
   final ExerciseSet? previous;
 
   const _SetRow({
@@ -598,6 +612,7 @@ class _SetRow extends StatefulWidget {
     required this.logIndex,
     required this.setIndex,
     required this.set,
+    required this.unilateral,
     required this.previous,
   });
 
@@ -612,16 +627,25 @@ class _SetRowState extends State<_SetRow> {
   late final _repsController = TextEditingController(
     text: widget.set.reps > 0 ? '${widget.set.reps}' : '',
   );
+  late final _repsRightController = TextEditingController(
+    text: (widget.set.repsRight ?? 0) > 0 ? '${widget.set.repsRight}' : '',
+  );
 
   @override
   void dispose() {
     _weightController.dispose();
     _repsController.dispose();
+    _repsRightController.dispose();
     super.dispose();
   }
 
   double? get _typedWeight => double.tryParse(_weightController.text.replaceAll(',', '.'));
   int? get _typedReps => int.tryParse(_repsController.text);
+  int? get _typedRepsRight => int.tryParse(_repsRightController.text);
+
+  /// Répétitions de la séance précédente pour le côté droit. Si l'exercice
+  /// était alors réalisé des deux côtés à la fois, on reprend le même nombre.
+  int? get _previousRepsRight => widget.previous?.repsRight ?? widget.previous?.reps;
 
   void _onChanged() {
     context.read<ActiveWorkoutProvider>().updateSet(
@@ -629,6 +653,7 @@ class _SetRowState extends State<_SetRow> {
           widget.setIndex,
           weight: _typedWeight ?? 0,
           reps: _typedReps ?? 0,
+          repsRight: widget.unilateral ? (_typedRepsRight ?? 0) : null,
         );
   }
 
@@ -645,16 +670,26 @@ class _SetRowState extends State<_SetRow> {
 
     final weight = _typedWeight ?? widget.previous?.weight;
     final reps = _typedReps ?? widget.previous?.reps;
-    if (weight == null || reps == null || reps <= 0) {
+    final repsRight = widget.unilateral ? (_typedRepsRight ?? _previousRepsRight) : null;
+
+    final missingRight = widget.unilateral && (repsRight == null || repsRight <= 0);
+    if (weight == null || reps == null || reps <= 0 || missingRight) {
       FocusScope.of(context).unfocus();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Indique la charge et le nombre de répétitions.')),
+        SnackBar(
+          content: Text(
+            widget.unilateral
+                ? 'Indique la charge et les répétitions de chaque côté.'
+                : 'Indique la charge et le nombre de répétitions.',
+          ),
+        ),
       );
       return;
     }
 
     _weightController.text = formatWeight(weight);
     _repsController.text = '$reps';
+    if (repsRight != null) _repsRightController.text = '$repsRight';
     FocusScope.of(context).unfocus();
     HapticFeedback.mediumImpact();
     provider.setCompleted(
@@ -663,6 +698,7 @@ class _SetRowState extends State<_SetRow> {
       completed: true,
       weight: weight,
       reps: reps,
+      repsRight: repsRight,
     );
   }
 
@@ -670,6 +706,43 @@ class _SetRowState extends State<_SetRow> {
   Widget build(BuildContext context) {
     final done = widget.set.isCompleted;
     final previous = widget.previous;
+
+    final Widget repsColumn;
+    if (widget.unilateral) {
+      repsColumn = SizedBox(
+        width: _Cols.repsUnilateral,
+        child: Column(
+          children: [
+            _SideField(
+              side: 'G',
+              controller: _repsController,
+              hint: previous == null ? '0' : '${previous.reps}',
+              done: done,
+              onChanged: (_) => _onChanged(),
+            ),
+            const SizedBox(height: AppSpace.xs),
+            _SideField(
+              side: 'D',
+              controller: _repsRightController,
+              hint: _previousRepsRight == null ? '0' : '$_previousRepsRight',
+              done: done,
+              onChanged: (_) => _onChanged(),
+            ),
+          ],
+        ),
+      );
+    } else {
+      repsColumn = SizedBox(
+        width: _Cols.reps,
+        child: _NumberField(
+          controller: _repsController,
+          hint: previous == null ? '0' : '${previous.reps}',
+          decimal: false,
+          done: done,
+          onChanged: (_) => _onChanged(),
+        ),
+      );
+    }
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
@@ -691,8 +764,10 @@ class _SetRowState extends State<_SetRow> {
           ),
           Expanded(
             child: Text(
-              previous == null ? '–' : '${formatWeight(previous.weight)} × ${previous.reps}',
+              previous == null ? '–' : '${formatWeight(previous.weight)} × ${previous.repsLabel}',
               style: AppText.label.copyWith(color: AppColors.textFaint),
+              // La colonne est plus étroite pour un exercice unilatéral.
+              maxLines: widget.unilateral ? 2 : 1,
               overflow: TextOverflow.ellipsis,
             ),
           ),
@@ -707,16 +782,7 @@ class _SetRowState extends State<_SetRow> {
             ),
           ),
           const SizedBox(width: _Cols.gap),
-          SizedBox(
-            width: _Cols.reps,
-            child: _NumberField(
-              controller: _repsController,
-              hint: previous == null ? '0' : '${previous.reps}',
-              decimal: false,
-              done: done,
-              onChanged: (_) => _onChanged(),
-            ),
-          ),
+          repsColumn,
           const SizedBox(width: _Cols.gap),
           SizedBox(
             width: _Cols.check,
@@ -740,6 +806,48 @@ class _SetRowState extends State<_SetRow> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Champ de répétitions d'un côté (G ou D) pour un exercice unilatéral.
+class _SideField extends StatelessWidget {
+  final String side;
+  final TextEditingController controller;
+  final String hint;
+  final bool done;
+  final ValueChanged<String> onChanged;
+
+  const _SideField({
+    required this.side,
+    required this.controller,
+    required this.hint,
+    required this.done,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        SizedBox(
+          width: 16,
+          child: Text(
+            side,
+            style: AppText.caption.copyWith(fontWeight: FontWeight.w700),
+            textAlign: TextAlign.center,
+          ),
+        ),
+        Expanded(
+          child: _NumberField(
+            controller: controller,
+            hint: hint,
+            decimal: false,
+            done: done,
+            onChanged: onChanged,
+          ),
+        ),
+      ],
     );
   }
 }

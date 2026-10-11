@@ -343,6 +343,10 @@ class _ExerciseRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(exercise.name, style: AppText.heading),
+                  if (exercise.isUnilateral) ...[
+                    const SizedBox(height: 2),
+                    const Text('Unilatéral, gauche et droite', style: AppText.caption),
+                  ],
                   if (exercise.notes != null && exercise.notes!.isNotEmpty) ...[
                     const SizedBox(height: 2),
                     Text(
@@ -396,6 +400,7 @@ Future<GlobalExercise?> showExerciseEditor(
       name: result.name,
       notes: result.notes,
       category: result.category,
+      isUnilateral: result.isUnilateral,
     );
     await provider.addGlobalExercise(created);
     return created;
@@ -407,6 +412,7 @@ Future<GlobalExercise?> showExerciseEditor(
     name: result.name,
     notes: result.notes,
     category: result.category,
+    isUnilateral: result.isUnilateral,
     createdAt: exercise.createdAt,
   );
   await provider.updateGlobalExercise(updated);
@@ -417,12 +423,14 @@ class _ExerciseEditorResult {
   final String name;
   final String? notes;
   final String? category;
+  final bool isUnilateral;
   final bool delete;
 
   const _ExerciseEditorResult({
     this.name = '',
     this.notes,
     this.category,
+    this.isUnilateral = false,
     this.delete = false,
   });
 }
@@ -443,6 +451,7 @@ class _ExerciseEditorSheetState extends State<_ExerciseEditorSheet> {
   );
   late final _notesController = TextEditingController(text: widget.exercise?.notes ?? '');
   late String? _category = widget.exercise?.category;
+  late bool _isUnilateral = widget.exercise?.isUnilateral ?? false;
 
   bool get _isEditing => widget.exercise != null;
 
@@ -459,7 +468,12 @@ class _ExerciseEditorSheetState extends State<_ExerciseEditorSheet> {
     final notes = _notesController.text.trim();
     Navigator.pop(
       context,
-      _ExerciseEditorResult(name: name, notes: notes.isEmpty ? null : notes, category: _category),
+      _ExerciseEditorResult(
+        name: name,
+        notes: notes.isEmpty ? null : notes,
+        category: _category,
+        isUnilateral: _isUnilateral,
+      ),
     );
   }
 
@@ -530,7 +544,19 @@ class _ExerciseEditorSheetState extends State<_ExerciseEditorSheet> {
                   ),
               ],
             ),
-            const SizedBox(height: AppSpace.l),
+            const SizedBox(height: AppSpace.s),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: _isUnilateral,
+              onChanged: (value) => setState(() => _isUnilateral = value),
+              activeColor: AppColors.primary,
+              title: const Text('Unilatéral', style: AppText.heading),
+              subtitle: const Text(
+                'Un côté à la fois (curl haltère, fente…) : répétitions saisies pour la gauche et la droite.',
+                style: AppText.caption,
+              ),
+            ),
+            const SizedBox(height: AppSpace.s),
             TextField(
               controller: _notesController,
               maxLines: 2,

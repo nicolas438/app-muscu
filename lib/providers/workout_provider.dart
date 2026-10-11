@@ -163,6 +163,15 @@ class WorkoutProvider with ChangeNotifier {
     return null;
   }
 
+  /// Exercice de la bibliothèque portant ce nom (sans tenir compte de la casse).
+  GlobalExercise? findExerciseByName(String name) {
+    final lower = name.toLowerCase();
+    for (final exercise in _globalExercises) {
+      if (exercise.name.toLowerCase() == lower) return exercise;
+    }
+    return null;
+  }
+
   List<GlobalExercise> searchGlobalExercises(String query) {
     if (query.isEmpty) return _globalExercises;
     final lowerQuery = query.toLowerCase();

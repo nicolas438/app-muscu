@@ -166,7 +166,7 @@ class _SetLine extends StatelessWidget {
           ),
           Expanded(
             child: Text(
-              '${formatWeight(set.weight)} kg × ${set.reps}',
+              '${formatWeight(set.weight)} kg × ${set.repsLabel}',
               style: AppText.figureM.copyWith(fontSize: 19, color: color),
             ),
           ),
