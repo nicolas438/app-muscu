@@ -23,6 +23,50 @@ class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
 
   @override
+  void initState() {
+    super.initState();
+    // Propose de reprendre une séance interrompue une fois l'écran affiché.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _offerToResumeWorkout());
+  }
+
+  /// Affiche une proposition de reprise si une séance était en cours
+  /// lors de la dernière fermeture de l'application.
+  Future<void> _offerToResumeWorkout() async {
+    final activeProvider = context.read<ActiveWorkoutProvider>();
+    if (!activeProvider.hasActiveWorkout) return;
+
+    final sessionName = activeProvider.currentWorkout!.sessionName;
+    final resume = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Séance en cours'),
+        content: Text('Ta séance « $sessionName » n\'a pas été terminée. Veux-tu la reprendre ?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+            child: const Text('Abandonner'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Reprendre'),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted) return;
+    if (resume == true) {
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const ActiveWorkoutScreen()),
+      );
+    } else {
+      activeProvider.cancelWorkout();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: IndexedStack(
@@ -354,12 +398,44 @@ class _TodaySessionCard extends StatelessWidget {
     );
   }
 
-  void _startWorkout(BuildContext context, WorkoutSession session) {
+  Future<void> _startWorkout(BuildContext context, WorkoutSession session) async {
     final activeProvider = context.read<ActiveWorkoutProvider>();
     final workoutProvider = context.read<WorkoutProvider>();
-    activeProvider.startWorkout(session, workoutProvider);
+    final navigator = Navigator.of(context);
 
-    Navigator.of(context).push(
+    // Une séance est déjà en cours : on évite de l'écraser sans confirmation.
+    if (activeProvider.hasActiveWorkout) {
+      final runningName = activeProvider.currentWorkout!.sessionName;
+      final startNew = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Séance déjà en cours'),
+          content: Text(
+            'La séance « $runningName » n\'est pas terminée. '
+            'Démarrer « ${session.name} » l\'abandonnera sans la sauvegarder.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: TextButton.styleFrom(foregroundColor: AppColors.error),
+              child: const Text('Démarrer la nouvelle'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Reprendre l\'actuelle'),
+            ),
+          ],
+        ),
+      );
+
+      // Fenêtre fermée sans choix : on ne fait rien.
+      if (startNew == null) return;
+      if (startNew) activeProvider.startWorkout(session, workoutProvider);
+    } else {
+      activeProvider.startWorkout(session, workoutProvider);
+    }
+
+    navigator.push(
       MaterialPageRoute(
         builder: (_) => const ActiveWorkoutScreen(),
       ),

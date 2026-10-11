@@ -20,6 +20,9 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
   Timer? _timer;
   Duration _elapsed = Duration.zero;
 
+  /// Vrai pendant l'enregistrement de fin de séance.
+  bool _isFinishing = false;
+
   @override
   void initState() {
     super.initState();
@@ -96,6 +99,13 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
                       ),
                     ],
                   ),
+                ),
+                // Terminer est accessible à tout moment, quel que soit
+                // l'exercice affiché (exercice sauté, ajout hors séance…).
+                IconButton(
+                  icon: const Icon(LucideIcons.check, color: AppColors.success),
+                  tooltip: 'Terminer la séance',
+                  onPressed: () => _finishWorkout(context, provider),
                 ),
               ],
             ),
@@ -184,34 +194,44 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
     return false;
   }
 
+  /// Termine la séance : sauvegarde, célébration des records, bilan, puis retour.
+  ///
+  /// Les fenêtres sont affichées tant que l'écran est encore ouvert : fermer
+  /// l'écran d'abord rendait leur affichage aléatoire (contexte détruit).
   Future<void> _finishWorkout(BuildContext context, ActiveWorkoutProvider provider) async {
-    // Capture ALL providers before any async operation to avoid deactivated widget errors
+    // Capture des dépendances avant toute opération asynchrone.
     final workoutProvider = context.read<WorkoutProvider>();
-    final activeProvider = context.read<ActiveWorkoutProvider>();
     final navigator = Navigator.of(context);
-    
-    final completed = await provider.completeWorkout();
-    if (completed != null) {
-      // Check for new PRs
+
+    // Évite une double sauvegarde en cas d'appuis rapprochés sur « Terminer ».
+    if (_isFinishing) return;
+    _isFinishing = true;
+
+    try {
+      final completed = await provider.completeWorkout();
+      if (completed == null) return;
+
+      // Records calculés avant l'ajout à l'historique, pour comparer
+      // uniquement avec les séances précédentes.
       final newPRs = workoutProvider.checkForNewPRs(completed);
-      
-      // Persist the completed workout through the WorkoutProvider so it
-      // updates its in-memory lists and runs weekly-goal checks (which
-      // increment the flame/streak when appropriate).
+
+      // Passe par WorkoutProvider pour mettre à jour l'historique en mémoire
+      // et l'objectif hebdomadaire (flammes).
       await workoutProvider.saveCompletedWorkout(completed);
-      
-      if (mounted) {
-        navigator.pop();
-        
-        // Show PR celebration if there are new PRs
-        if (newPRs.isNotEmpty && mounted) {
-          await _showPRCelebrationStandalone(newPRs);
-        }
-        
-        if (mounted) {
-          _showCompletionDialogStandalone(activeProvider, completed);
-        }
+
+      if (newPRs.isNotEmpty && mounted) {
+        await _showPRCelebration(newPRs);
       }
+
+      if (mounted) {
+        await _showCompletionDialog(completed);
+      }
+
+      // Retour à l'écran précédent, puis libération de la séance terminée.
+      navigator.pop();
+      provider.reset();
+    } finally {
+      _isFinishing = false;
     }
   }
 
@@ -234,15 +254,18 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
       
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('$exerciseName ajouté ! Va sur l\'exercice pour ajouter des séries.'),
+          content: Text('$exerciseName ajouté ! Tu peux saisir tes séries.'),
           backgroundColor: AppColors.success,
           duration: const Duration(seconds: 3),
+          // Flottant et décalé pour ne pas masquer les boutons du bas.
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 96),
         ),
       );
     }
   }
 
-  Future<void> _showPRCelebrationStandalone(Map<String, Map<String, double>> prs) async {
+  Future<void> _showPRCelebration(Map<String, Map<String, double>> prs) async {
     if (!mounted || prs.isEmpty) return;
 
     // Push a single modal that sequences all PRs internally so the
@@ -262,10 +285,9 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
     );
   }
 
-  void _showCompletionDialogStandalone(ActiveWorkoutProvider activeProvider, CompletedWorkout workout) {
-    if (!mounted) return;
-    
-    showDialog(
+  /// Affiche le bilan de la séance et attend sa fermeture.
+  Future<void> _showCompletionDialog(CompletedWorkout workout) {
+    return showDialog<void>(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
@@ -293,10 +315,7 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
         ),
         actions: [
           ElevatedButton(
-            onPressed: () {
-              activeProvider.reset();
-              Navigator.pop(ctx);
-            },
+            onPressed: () => Navigator.pop(ctx),
             child: const Text('FERMER'),
           ),
         ],

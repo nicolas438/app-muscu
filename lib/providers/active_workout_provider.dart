@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import '../models/models.dart';
 import '../services/services.dart';
@@ -9,6 +11,11 @@ enum ActiveWorkoutStatus {
   completed,
 }
 
+/// Gère la séance en cours : exercices, séries saisies et navigation.
+///
+/// Chaque modification est immédiatement enregistrée dans le stockage local,
+/// ce qui permet de reprendre la séance si l'application est fermée
+/// (mise en arrière-plan prolongée, appel, batterie vide…).
 class ActiveWorkoutProvider with ChangeNotifier {
   final StorageService _storage = StorageService();
 
@@ -36,6 +43,23 @@ class ActiveWorkoutProvider with ChangeNotifier {
     return DateTime.now().difference(_workoutStartTime!);
   }
 
+  /// Restaure une séance interrompue lors d'une précédente exécution.
+  ///
+  /// À appeler au démarrage, après l'initialisation du stockage.
+  void restoreActiveWorkout() {
+    final saved = _storage.getActiveWorkout();
+    if (saved == null) return;
+
+    final workout = saved.workout;
+    _currentWorkout = workout;
+    _currentExerciseIndex = workout.exerciseLogs.isEmpty
+        ? 0
+        : saved.currentExerciseIndex.clamp(0, workout.exerciseLogs.length - 1);
+    _status = ActiveWorkoutStatus.inProgress;
+    _workoutStartTime = workout.startTime;
+    notifyListeners();
+  }
+
   // Start a new workout
   void startWorkout(WorkoutSession session, WorkoutProvider workoutProvider) {
     final workoutId = _storage.generateId();
@@ -45,7 +69,7 @@ class ActiveWorkoutProvider with ChangeNotifier {
     final exerciseLogs = session.exerciseRefs.map((ref) {
       final globalExercise = workoutProvider.getGlobalExerciseById(ref.exerciseId);
       if (globalExercise == null) return null;
-      
+
       // Create an Exercise from GlobalExercise
       final exercise = Exercise(
         id: globalExercise.id,
@@ -68,6 +92,7 @@ class ActiveWorkoutProvider with ChangeNotifier {
     _status = ActiveWorkoutStatus.inProgress;
     _workoutStartTime = now;
 
+    _persist();
     notifyListeners();
   }
 
@@ -92,6 +117,7 @@ class ActiveWorkoutProvider with ChangeNotifier {
     );
 
     currentExerciseLog!.sets.add(newSet);
+    _persist();
     notifyListeners();
   }
 
@@ -107,6 +133,7 @@ class ActiveWorkoutProvider with ChangeNotifier {
       notes: notes,
     );
 
+    _persist();
     notifyListeners();
   }
 
@@ -124,10 +151,14 @@ class ActiveWorkoutProvider with ChangeNotifier {
       );
     }
 
+    _persist();
     notifyListeners();
   }
 
-  // Add an off-session exercise (exercice hors séance)
+  /// Ajoute un exercice hors séance et l'affiche directement.
+  ///
+  /// L'exercice est placé en fin de liste ; on bascule dessus pour que
+  /// l'utilisateur puisse saisir ses séries sans naviguer manuellement.
   void addOffSessionExercise(String exerciseName) {
     if (_currentWorkout == null) return;
 
@@ -142,6 +173,8 @@ class ActiveWorkoutProvider with ChangeNotifier {
     );
 
     _currentWorkout!.exerciseLogs.add(offSessionLog);
+    _currentExerciseIndex = _currentWorkout!.exerciseLogs.length - 1;
+    _persist();
     notifyListeners();
   }
 
@@ -150,6 +183,7 @@ class ActiveWorkoutProvider with ChangeNotifier {
     if (_currentWorkout == null) return;
     if (_currentExerciseIndex < _currentWorkout!.exerciseLogs.length - 1) {
       _currentExerciseIndex++;
+      _persist();
       notifyListeners();
     }
   }
@@ -157,6 +191,7 @@ class ActiveWorkoutProvider with ChangeNotifier {
   void previousExercise() {
     if (_currentExerciseIndex > 0) {
       _currentExerciseIndex--;
+      _persist();
       notifyListeners();
     }
   }
@@ -165,6 +200,7 @@ class ActiveWorkoutProvider with ChangeNotifier {
     if (_currentWorkout == null) return;
     if (index >= 0 && index < _currentWorkout!.exerciseLogs.length) {
       _currentExerciseIndex = index;
+      _persist();
       notifyListeners();
     }
   }
@@ -183,28 +219,42 @@ class ActiveWorkoutProvider with ChangeNotifier {
     // Save to storage
     await _storage.saveCompletedWorkout(_currentWorkout!);
 
+    // La séance fait désormais partie de l'historique : elle ne doit plus
+    // être proposée à la reprise au prochain lancement.
+    await _storage.clearActiveWorkout();
+
     final completedWorkout = _currentWorkout;
-    
+
     notifyListeners();
-    
+
     return completedWorkout;
   }
 
   // Cancel workout
   void cancelWorkout() {
-    _currentWorkout = null;
-    _currentExerciseIndex = 0;
-    _status = ActiveWorkoutStatus.notStarted;
-    _workoutStartTime = null;
+    _clearState();
+    unawaited(_storage.clearActiveWorkout());
     notifyListeners();
   }
 
   // Reset after completing
   void reset() {
+    _clearState();
+    unawaited(_storage.clearActiveWorkout());
+    notifyListeners();
+  }
+
+  /// Réinitialise l'état en mémoire (sans toucher au stockage).
+  void _clearState() {
     _currentWorkout = null;
     _currentExerciseIndex = 0;
     _status = ActiveWorkoutStatus.notStarted;
     _workoutStartTime = null;
-    notifyListeners();
+  }
+
+  /// Enregistre la séance en cours sans bloquer l'interface.
+  void _persist() {
+    if (_currentWorkout == null || _status != ActiveWorkoutStatus.inProgress) return;
+    unawaited(_storage.saveActiveWorkout(_currentWorkout!, _currentExerciseIndex));
   }
 }

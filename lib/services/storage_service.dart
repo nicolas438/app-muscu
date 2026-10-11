@@ -8,12 +8,14 @@ class StorageService {
   static const String _completedWorkoutsBox = 'completed_workouts';
   static const String _scheduleBox = 'weekly_schedule';
   static const String _streakBox = 'user_streak';
+  static const String _activeWorkoutBox = 'active_workout';
 
   late Box<Map> _globalExercisesBoxInstance;
   late Box<Map> _sessionsBoxInstance;
   late Box<Map> _completedWorkoutsBoxInstance;
   late Box<Map> _scheduleBoxInstance;
   late Box<Map> _streakBoxInstance;
+  late Box<Map> _activeWorkoutBoxInstance;
 
   final _uuid = const Uuid();
 
@@ -30,6 +32,7 @@ class StorageService {
     _completedWorkoutsBoxInstance = await Hive.openBox<Map>(_completedWorkoutsBox);
     _scheduleBoxInstance = await Hive.openBox<Map>(_scheduleBox);
     _streakBoxInstance = await Hive.openBox<Map>(_streakBox);
+    _activeWorkoutBoxInstance = await Hive.openBox<Map>(_activeWorkoutBox);
   }
 
   String generateId() => _uuid.v4();
@@ -250,5 +253,48 @@ class StorageService {
 
   Future<void> saveUserStreak(UserStreak streak) async {
     await _streakBoxInstance.put('streak', streak.toJson());
+  }
+
+  // =====================
+  // SÉANCE EN COURS
+  // =====================
+
+  /// Clé unique sous laquelle la séance en cours est conservée.
+  static const String _activeWorkoutKey = 'current';
+
+  /// Sauvegarde l'état de la séance en cours (séries saisies et exercice affiché).
+  ///
+  /// Appelée après chaque modification afin qu'aucune donnée ne soit perdue
+  /// si le système ferme l'application pendant l'entraînement.
+  Future<void> saveActiveWorkout(CompletedWorkout workout, int currentExerciseIndex) async {
+    await _activeWorkoutBoxInstance.put(_activeWorkoutKey, {
+      'workout': workout.toJson(),
+      'currentExerciseIndex': currentExerciseIndex,
+    });
+  }
+
+  /// Restaure la séance en cours, ou renvoie `null` s'il n'y en a pas.
+  ///
+  /// Une donnée illisible (format obsolète, écriture interrompue) est supprimée
+  /// plutôt que de bloquer le démarrage de l'application.
+  ({CompletedWorkout workout, int currentExerciseIndex})? getActiveWorkout() {
+    final data = _activeWorkoutBoxInstance.get(_activeWorkoutKey);
+    if (data == null) return null;
+
+    try {
+      final map = _convertMap(data);
+      return (
+        workout: CompletedWorkout.fromJson(map['workout'] as Map<String, dynamic>),
+        currentExerciseIndex: map['currentExerciseIndex'] as int? ?? 0,
+      );
+    } catch (_) {
+      _activeWorkoutBoxInstance.delete(_activeWorkoutKey);
+      return null;
+    }
+  }
+
+  /// Supprime la séance en cours une fois celle-ci terminée ou abandonnée.
+  Future<void> clearActiveWorkout() async {
+    await _activeWorkoutBoxInstance.delete(_activeWorkoutKey);
   }
 }

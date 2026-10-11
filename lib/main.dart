@@ -36,7 +36,8 @@ class AppNuno extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => WorkoutProvider()..loadAll()),
-        ChangeNotifierProvider(create: (_) => ActiveWorkoutProvider()),
+        // Restaure une éventuelle séance interrompue (application fermée en cours d'entraînement)
+        ChangeNotifierProvider(create: (_) => ActiveWorkoutProvider()..restoreActiveWorkout()),
       ],
       child: Container(
         decoration: const BoxDecoration(
