@@ -159,7 +159,7 @@ class _TodayTab extends StatelessWidget {
           if (recent.isEmpty)
             Text(
               'Tes séances terminées apparaîtront ici.',
-              style: AppText.body.copyWith(color: AppColors.inkSoft),
+              style: AppText.body.copyWith(color: AppColors.textSoft),
             )
           else
             Panel(
@@ -193,17 +193,17 @@ class _StreakBadge extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.fromLTRB(AppSpace.m, AppSpace.s, AppSpace.l, AppSpace.s),
         decoration: BoxDecoration(
-          color: active ? AppColors.flame : AppColors.surfaceMuted,
+          color: active ? AppColors.flame : AppColors.surfaceRaised,
           borderRadius: BorderRadius.circular(999),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(LucideIcons.flame, size: 18, color: active ? AppColors.ink : AppColors.inkFaint),
+            Icon(LucideIcons.flame, size: 18, color: active ? AppColors.onInverse : AppColors.textFaint),
             const SizedBox(width: AppSpace.xs),
             Text(
               '$streak',
-              style: AppText.figureM.copyWith(color: active ? AppColors.ink : AppColors.inkFaint),
+              style: AppText.figureM.copyWith(color: active ? AppColors.onInverse : AppColors.textFaint),
             ),
           ],
         ),
@@ -231,74 +231,71 @@ class _TodayCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final String caption;
     final String title;
-    final String? detail;
-    final Widget action;
-    Color? plateColor;
+    final String detail;
+    final String actionLabel;
+    final VoidCallback onAction;
+    final Color background;
 
     if (activeWorkout != null) {
       // Une séance est en cours : la reprendre est la seule chose qui compte.
-      caption = 'Séance en cours';
+      caption = 'Séance en pause';
       title = activeWorkout!.sessionName;
       detail = '${plural(activeWorkout!.totalSets, 'série')} '
-          '${activeWorkout!.totalSets > 1 ? 'enregistrées' : 'enregistrée'}';
-      action = FilledButton.icon(
-        onPressed: () => openActiveWorkout(context),
-        icon: const Icon(LucideIcons.play, size: 18),
-        label: const Text('Reprendre la séance'),
-      );
+          '${activeWorkout!.totalSets > 1 ? 'validées' : 'validée'}';
+      actionLabel = 'Reprendre la séance';
+      onAction = () => openActiveWorkout(context);
+      background = AppColors.primary;
     } else if (session != null) {
       caption = 'Prévu aujourd\'hui';
       title = session!.name;
-      plateColor = AppColors.sessionColor(session!.color);
       final count = plural(session!.exerciseRefs.length, 'exercice');
       detail = lastWorkout == null
           ? count
           : '$count, dernière fois le ${DateFormat('d MMMM', 'fr_FR').format(lastWorkout!.date)}';
-      action = FilledButton.icon(
-        onPressed: () => startWorkout(context, session!),
-        icon: const Icon(LucideIcons.play, size: 18),
-        label: const Text('Commencer la séance'),
-      );
+      actionLabel = 'Commencer la séance';
+      onAction = () => startWorkout(context, session!);
+      // La carte prend la couleur du disque associé à la séance.
+      background = AppColors.sessionColor(session!.color);
     } else {
       caption = 'Rien de prévu';
       title = 'Jour de repos';
       detail = 'Envie de t\'entraîner quand même ? Lance n\'importe quelle séance.';
-      action = OutlinedButton(
-        onPressed: onOpenSessions,
-        style: OutlinedButton.styleFrom(
-          foregroundColor: Colors.white,
-          side: const BorderSide(color: Colors.white24, width: 1.5),
-        ),
-        child: const Text('Voir mes séances'),
-      );
+      actionLabel = 'Voir mes séances';
+      onAction = onOpenSessions;
+      background = AppColors.surfaceRaised;
     }
+
+    // Texte et bouton contrastés selon la couleur de fond (disque jaune ou blanc).
+    final foreground = AppColors.onColor(background);
+    final isRest = activeWorkout == null && session == null;
 
     return Container(
       padding: const EdgeInsets.all(AppSpace.xl),
       decoration: BoxDecoration(
-        color: AppColors.ink,
+        color: background,
         borderRadius: BorderRadius.circular(AppRadius.l),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              if (plateColor != null) ...[
-                PlateMarker(color: plateColor, size: 14),
-                const SizedBox(width: AppSpace.s),
-              ],
-              Text(caption, style: AppText.label.copyWith(color: Colors.white70)),
-            ],
-          ),
+          Text(caption, style: AppText.label.copyWith(color: foreground.withValues(alpha: 0.75))),
           const SizedBox(height: AppSpace.s),
-          Text(title, style: AppText.display.copyWith(color: Colors.white, fontSize: 38)),
-          if (detail != null) ...[
-            const SizedBox(height: AppSpace.s),
-            Text(detail, style: AppText.body.copyWith(color: Colors.white60)),
-          ],
+          Text(title, style: AppText.display.copyWith(color: foreground, fontSize: 40)),
+          const SizedBox(height: AppSpace.s),
+          Text(detail, style: AppText.body.copyWith(color: foreground.withValues(alpha: 0.75))),
           const SizedBox(height: AppSpace.xl),
-          SizedBox(width: double.infinity, child: action),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: onAction,
+              style: FilledButton.styleFrom(
+                backgroundColor: isRest ? AppColors.primary : foreground,
+                foregroundColor: isRest ? Colors.white : background,
+              ),
+              icon: Icon(isRest ? LucideIcons.list : LucideIcons.play, size: 18),
+              label: Text(actionLabel),
+            ),
+          ),
         ],
       ),
     );
@@ -329,7 +326,7 @@ class _WeekPanel extends StatelessWidget {
               TextButton(
                 onPressed: () => _showGoalPicker(context, goal),
                 style: TextButton.styleFrom(
-                  foregroundColor: AppColors.inkSoft,
+                  foregroundColor: AppColors.textSoft,
                   textStyle: AppText.label,
                   padding: const EdgeInsets.symmetric(horizontal: AppSpace.s),
                 ),
@@ -359,7 +356,7 @@ class _WeekPanel extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: i < done
                           ? (goalMet ? AppColors.flame : AppColors.success)
-                          : AppColors.surfaceMuted,
+                          : AppColors.surfaceRaised,
                       borderRadius: BorderRadius.circular(3),
                     ),
                   ),
@@ -375,7 +372,7 @@ class _WeekPanel extends StatelessWidget {
                   goalMet
                       ? 'Objectif atteint, la semaine est validée.'
                       : '${(done).clamp(0, goal)} sur $goal, encore ${plural(goal - done, 'séance')}.',
-                  style: AppText.label.copyWith(color: goalMet ? AppColors.ink : AppColors.inkSoft),
+                  style: AppText.label.copyWith(color: goalMet ? AppColors.text : AppColors.textSoft),
                 ),
               ),
               if (streak.bestStreak > 0)
@@ -401,7 +398,7 @@ class _WeekPanel extends StatelessWidget {
               const SizedBox(height: AppSpace.xs),
               Text(
                 'Combien de séances par semaine ? Chaque semaine tenue ajoute une flamme.',
-                style: AppText.body.copyWith(color: AppColors.inkSoft),
+                style: AppText.body.copyWith(color: AppColors.textSoft),
               ),
               const SizedBox(height: AppSpace.xl),
               Row(
@@ -439,7 +436,7 @@ class _GoalOption extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: selected ? AppColors.ink : AppColors.chalk,
+      color: selected ? AppColors.inverse : AppColors.surfaceRaised,
       borderRadius: BorderRadius.circular(AppRadius.s),
       child: InkWell(
         onTap: onTap,
@@ -449,7 +446,7 @@ class _GoalOption extends StatelessWidget {
           child: Center(
             child: Text(
               '$value',
-              style: AppText.figureM.copyWith(color: selected ? Colors.white : AppColors.ink),
+              style: AppText.figureM.copyWith(color: selected ? AppColors.onInverse : AppColors.text),
             ),
           ),
         ),
@@ -527,19 +524,23 @@ class _DayDot extends StatelessWidget {
         height: 34,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: isToday ? AppColors.chalk : null,
+          color: isToday ? AppColors.surfaceRaised : null,
           border: Border.all(
-            color: isToday ? AppColors.ink : AppColors.line,
+            color: isToday ? AppColors.text : AppColors.line,
             width: isToday ? 2 : 1,
           ),
         ),
         alignment: Alignment.center,
         child: plannedColor != null
-            ? PlateMarker(color: plannedColor!, size: 12)
+            ? PlateMarker(
+                color: plannedColor!,
+                size: 12,
+                holeColor: isToday ? AppColors.surfaceRaised : AppColors.surface,
+              )
             : Text(
                 '$dayOfMonth',
                 style: AppText.caption.copyWith(
-                  color: isToday ? AppColors.ink : AppColors.inkFaint,
+                  color: isToday ? AppColors.text : AppColors.textFaint,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -551,7 +552,7 @@ class _DayDot extends StatelessWidget {
         Text(
           letter,
           style: AppText.caption.copyWith(
-            color: isToday ? AppColors.ink : AppColors.inkFaint,
+            color: isToday ? AppColors.text : AppColors.textFaint,
             fontWeight: isToday ? FontWeight.w700 : FontWeight.w500,
           ),
         ),
@@ -599,7 +600,7 @@ class _HistoryRow extends StatelessWidget {
             const SizedBox(width: AppSpace.xs),
             Text(workout.totalSets > 1 ? 'séries' : 'série', style: AppText.caption),
             const SizedBox(width: AppSpace.s),
-            const Icon(LucideIcons.chevron_right, size: 18, color: AppColors.inkFaint),
+            const Icon(LucideIcons.chevron_right, size: 18, color: AppColors.textFaint),
           ],
         ),
       ),

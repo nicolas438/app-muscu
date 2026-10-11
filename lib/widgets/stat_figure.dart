@@ -12,7 +12,7 @@ class StatFigure extends StatelessWidget {
     super.key,
     required this.value,
     required this.label,
-    this.color = AppColors.ink,
+    this.color = AppColors.text,
     this.alignment = CrossAxisAlignment.start,
   });
 

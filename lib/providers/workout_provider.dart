@@ -112,6 +112,21 @@ class WorkoutProvider with ChangeNotifier {
     return null;
   }
 
+  /// Séries réalisées sur un exercice lors de la séance la plus récente qui
+  /// le contient, pour afficher la colonne « Précédent » et préparer la
+  /// séance suivante.
+  List<ExerciseSet> getPreviousSetsForExercise(String exerciseName) {
+    final name = exerciseName.toLowerCase();
+    for (final workout in _completedWorkouts) {
+      for (final log in workout.exerciseLogs) {
+        if (log.exerciseName.toLowerCase() == name && log.sets.isNotEmpty) {
+          return log.sets;
+        }
+      }
+    }
+    return const [];
+  }
+
   // ===========================================================================
   // CHARGEMENT
   // ===========================================================================

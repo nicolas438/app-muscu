@@ -309,7 +309,7 @@ class _Segmented<T> extends StatelessWidget {
       height: compact ? 34 : 44,
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
-        color: AppColors.surfaceMuted,
+        color: AppColors.surfaceRaised,
         borderRadius: BorderRadius.circular(AppRadius.m),
       ),
       child: Row(
@@ -328,13 +328,13 @@ class _Segmented<T> extends StatelessWidget {
         padding: EdgeInsets.symmetric(horizontal: compact ? AppSpace.m : AppSpace.s),
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: selected ? AppColors.surface : Colors.transparent,
+          color: selected ? AppColors.inverse : Colors.transparent,
           borderRadius: BorderRadius.circular(AppRadius.s),
         ),
         child: Text(
           label,
           style: AppText.label.copyWith(
-            color: selected ? AppColors.ink : AppColors.inkSoft,
+            color: selected ? AppColors.onInverse : AppColors.textSoft,
             fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
             fontSize: compact ? 12 : 13,
           ),
@@ -359,12 +359,12 @@ class _ExerciseSelector extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: AppSpace.l, vertical: AppSpace.m + 2),
       child: Row(
         children: [
-          const Icon(LucideIcons.dumbbell, size: 18, color: AppColors.inkSoft),
+          const Icon(LucideIcons.dumbbell, size: 18, color: AppColors.textSoft),
           const SizedBox(width: AppSpace.m),
           Expanded(
             child: Text(selected ?? 'Choisir un exercice', style: AppText.heading),
           ),
-          const Icon(LucideIcons.chevron_down, size: 18, color: AppColors.inkSoft),
+          const Icon(LucideIcons.chevron_down, size: 18, color: AppColors.textSoft),
         ],
       ),
     );
@@ -409,7 +409,7 @@ class _ExercisePickerListState extends State<_ExercisePickerList> {
               onChanged: (value) => setState(() => _query = value.trim()),
               decoration: const InputDecoration(
                 hintText: 'Rechercher un exercice',
-                prefixIcon: Icon(LucideIcons.search, size: 20, color: AppColors.inkFaint),
+                prefixIcon: Icon(LucideIcons.search, size: 20, color: AppColors.textFaint),
               ),
             ),
           ),
@@ -517,12 +517,12 @@ class _ProgressChart extends StatelessWidget {
           ),
           lineTouchData: LineTouchData(
             touchTooltipData: LineTouchTooltipData(
-              getTooltipColor: (_) => AppColors.ink,
+              getTooltipColor: (_) => AppColors.surfaceRaised,
               getTooltipItems: (spots) => spots.map((spot) {
                 final point = points[spot.spotIndex];
                 return LineTooltipItem(
                   '${formatKg(spot.y)}\n${DateFormat('d MMM', 'fr_FR').format(point.date)}',
-                  AppText.label.copyWith(color: Colors.white, fontWeight: FontWeight.w600),
+                  AppText.label.copyWith(color: AppColors.text, fontWeight: FontWeight.w600),
                 );
               }).toList(),
             ),
@@ -547,7 +547,7 @@ class _ProgressChart extends StatelessWidget {
               ),
               belowBarData: BarAreaData(
                 show: true,
-                color: AppColors.primary.withValues(alpha: 0.08),
+                color: AppColors.primary.withValues(alpha: 0.15),
               ),
             ),
           ],
@@ -594,7 +594,7 @@ class _ComparisonPanel extends StatelessWidget {
     }
 
     final Color deltaColor = delta == null || delta == 0
-        ? AppColors.inkSoft
+        ? AppColors.textSoft
         : (delta > 0 ? AppColors.success : AppColors.record);
     final String deltaText = delta == null
         ? '–'

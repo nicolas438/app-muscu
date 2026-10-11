@@ -7,6 +7,7 @@ import '../../providers/providers.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/format.dart';
 import '../../widgets/widgets.dart';
+import 'workout_summary_screen.dart';
 
 /// Détail d'une séance terminée : bilan, séries de chaque exercice et records.
 class WorkoutDetailScreen extends StatelessWidget {
@@ -53,6 +54,18 @@ class WorkoutDetailScreen extends StatelessWidget {
         ),
         actions: [
           IconButton(
+            icon: const Icon(Icons.share, size: 20),
+            tooltip: 'Partager le bilan',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => WorkoutSummaryScreen(
+                  workout: workout,
+                  records: provider.checkForNewPRs(workout),
+                ),
+              ),
+            ),
+          ),
+          IconButton(
             icon: const Icon(LucideIcons.trash_2, size: 20),
             tooltip: 'Supprimer la séance',
             onPressed: () => _confirmDelete(context),
@@ -78,14 +91,14 @@ class WorkoutDetailScreen extends StatelessWidget {
           ),
           if (workout.notes != null && workout.notes!.isNotEmpty) ...[
             const SizedBox(height: AppSpace.l),
-            Text(workout.notes!, style: AppText.body.copyWith(color: AppColors.inkSoft)),
+            Text(workout.notes!, style: AppText.body.copyWith(color: AppColors.textSoft)),
           ],
           const SizedBox(height: AppSpace.xxl),
           const SectionTitle('Exercices'),
           if (logs.isEmpty)
             Text(
               'Aucune série n\'a été enregistrée pendant cette séance.',
-              style: AppText.body.copyWith(color: AppColors.inkSoft),
+              style: AppText.body.copyWith(color: AppColors.textSoft),
             ),
           for (final log in logs) ...[
             _ExerciseLogPanel(log: log, isRecord: recordNames.contains(log.exerciseName)),
@@ -115,7 +128,7 @@ class _ExerciseLogPanel extends StatelessWidget {
           Row(
             children: [
               Expanded(child: Text(log.exerciseName, style: AppText.heading)),
-              if (log.isOffSession) const _Tag(label: 'Hors séance', color: AppColors.inkSoft),
+              if (log.isOffSession) const _Tag(label: 'Hors séance', color: AppColors.textSoft),
               if (isRecord) ...[
                 const SizedBox(width: AppSpace.s),
                 const _Tag(label: 'Record', color: AppColors.record, filled: true),
@@ -141,7 +154,7 @@ class _SetLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = isBest ? AppColors.ink : AppColors.inkSoft;
+    final color = isBest ? AppColors.text : AppColors.textSoft;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: AppSpace.s),
@@ -160,7 +173,7 @@ class _SetLine extends StatelessWidget {
           Text(
             '1RM ${formatKg(set.estimatedOneRepMax)}',
             style: AppText.caption.copyWith(
-              color: isBest ? AppColors.ink : AppColors.inkFaint,
+              color: isBest ? AppColors.text : AppColors.textFaint,
               fontWeight: isBest ? FontWeight.w700 : FontWeight.w500,
             ),
           ),

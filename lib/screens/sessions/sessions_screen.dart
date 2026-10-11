@@ -76,8 +76,8 @@ class _SessionsScreenState extends State<SessionsScreen> with SingleTickerProvid
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => onSessionsTab ? openSessionEditor(context) : showExerciseEditor(context),
-        backgroundColor: AppColors.ink,
-        foregroundColor: Colors.white,
+        backgroundColor: AppColors.inverse,
+        foregroundColor: AppColors.onInverse,
         elevation: 2,
         icon: const Icon(LucideIcons.plus, size: 20),
         label: Text(onSessionsTab ? 'Nouvelle séance' : 'Nouvel exercice'),
@@ -98,19 +98,19 @@ class _SegmentedTabs extends StatelessWidget {
       height: 44,
       padding: const EdgeInsets.all(AppSpace.xs),
       decoration: BoxDecoration(
-        color: AppColors.surfaceMuted,
+        color: AppColors.surfaceRaised,
         borderRadius: BorderRadius.circular(AppRadius.m),
       ),
       child: TabBar(
         controller: controller,
         indicator: BoxDecoration(
-          color: AppColors.surface,
+          color: AppColors.inverse,
           borderRadius: BorderRadius.circular(AppRadius.s),
         ),
         indicatorSize: TabBarIndicatorSize.tab,
         dividerColor: Colors.transparent,
-        labelColor: AppColors.ink,
-        unselectedLabelColor: AppColors.inkSoft,
+        labelColor: AppColors.onInverse,
+        unselectedLabelColor: AppColors.textSoft,
         labelStyle: AppText.label.copyWith(fontWeight: FontWeight.w700),
         unselectedLabelStyle: AppText.label,
         splashBorderRadius: BorderRadius.circular(AppRadius.s),
@@ -278,7 +278,7 @@ class _ExercisesTabState extends State<_ExercisesTab> {
           onChanged: (value) => setState(() => _query = value.trim()),
           decoration: InputDecoration(
             hintText: 'Rechercher un exercice',
-            prefixIcon: const Icon(LucideIcons.search, size: 20, color: AppColors.inkFaint),
+            prefixIcon: const Icon(LucideIcons.search, size: 20, color: AppColors.textFaint),
             suffixIcon: _query.isEmpty
                 ? null
                 : IconButton(
@@ -297,7 +297,7 @@ class _ExercisesTabState extends State<_ExercisesTab> {
             padding: const EdgeInsets.only(top: AppSpace.xl),
             child: Text(
               'Aucun exercice ne correspond à « $_query ».',
-              style: AppText.body.copyWith(color: AppColors.inkSoft),
+              style: AppText.body.copyWith(color: AppColors.textSoft),
               textAlign: TextAlign.center,
             ),
           ),
@@ -520,11 +520,11 @@ class _ExerciseEditorSheetState extends State<_ExerciseEditorSheet> {
                     label: Text(group),
                     selected: _category == group,
                     showCheckmark: false,
-                    selectedColor: AppColors.ink,
-                    backgroundColor: AppColors.chalk,
+                    selectedColor: AppColors.inverse,
+                    backgroundColor: AppColors.surfaceRaised,
                     side: BorderSide.none,
                     labelStyle: AppText.label.copyWith(
-                      color: _category == group ? Colors.white : AppColors.ink,
+                      color: _category == group ? AppColors.onInverse : AppColors.text,
                     ),
                     onSelected: (selected) => setState(() => _category = selected ? group : null),
                   ),
@@ -728,10 +728,10 @@ class _EditSessionScreenState extends State<EditSessionScreen> {
             ),
             if (_exerciseRefs.isEmpty)
               Panel(
-                color: AppColors.chalk,
+                color: AppColors.surfaceRaised,
                 child: Text(
                   'Aucun exercice pour l\'instant. Ajoute ceux que tu enchaînes, dans l\'ordre que tu préfères.',
-                  style: AppText.body.copyWith(color: AppColors.inkSoft),
+                  style: AppText.body.copyWith(color: AppColors.textSoft),
                 ),
               )
             else
@@ -811,9 +811,9 @@ class _ColorOption extends StatelessWidget {
         padding: const EdgeInsets.all(3),
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          border: Border.all(color: selected ? AppColors.ink : Colors.transparent, width: 2),
+          border: Border.all(color: selected ? AppColors.text : Colors.transparent, width: 2),
         ),
-        child: PlateMarker(color: color, size: 34),
+        child: PlateMarker(color: color, size: 34, holeColor: AppColors.background),
       ),
     );
   }
@@ -841,20 +841,20 @@ class _ExerciseRefRow extends StatelessWidget {
           children: [
             SizedBox(
               width: 24,
-              child: Text('${index + 1}', style: AppText.figureM.copyWith(color: AppColors.inkFaint)),
+              child: Text('${index + 1}', style: AppText.figureM.copyWith(color: AppColors.textFaint)),
             ),
             const SizedBox(width: AppSpace.s),
             Expanded(child: Text(name, style: AppText.heading)),
             IconButton(
               onPressed: onRemove,
               tooltip: 'Retirer de la séance',
-              icon: const Icon(LucideIcons.x, size: 18, color: AppColors.inkSoft),
+              icon: const Icon(LucideIcons.x, size: 18, color: AppColors.textSoft),
             ),
             ReorderableDragStartListener(
               index: index,
               child: const Padding(
                 padding: EdgeInsets.all(AppSpace.m),
-                child: Icon(LucideIcons.grip_vertical, size: 20, color: AppColors.inkFaint),
+                child: Icon(LucideIcons.grip_vertical, size: 20, color: AppColors.textFaint),
               ),
             ),
           ],
@@ -907,7 +907,7 @@ class _ExercisePickerSheetState extends State<_ExercisePickerSheet> {
                   onChanged: (value) => setState(() => _query = value.trim()),
                   decoration: const InputDecoration(
                     hintText: 'Rechercher',
-                    prefixIcon: Icon(LucideIcons.search, size: 20, color: AppColors.inkFaint),
+                    prefixIcon: Icon(LucideIcons.search, size: 20, color: AppColors.textFaint),
                   ),
                 ),
               ],

@@ -2,8 +2,14 @@ import 'package:appnuno/models/models.dart';
 import 'package:appnuno/utils/format.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-ExerciseSet _set(double weight, int reps) =>
-    ExerciseSet(id: '$weight-$reps', weight: weight, reps: reps, setNumber: 1);
+/// Série validée de [weight] kg × [reps].
+ExerciseSet _set(double weight, int reps) => ExerciseSet(
+      id: '$weight-$reps',
+      weight: weight,
+      reps: reps,
+      setNumber: 1,
+      isCompleted: true,
+    );
 
 void main() {
   group('1RM estimé (Epley)', () {
@@ -44,6 +50,53 @@ void main() {
       final log = ExerciseLog(id: 'log', exerciseId: 'x', exerciseName: 'X');
       expect(log.bestSet, isNull);
       expect(log.bestEstimatedOneRepMax, 0);
+    });
+  });
+
+  group('Séries validées', () {
+    test('les séries prévues non cochées ne comptent pas', () {
+      final log = ExerciseLog(
+        id: 'log',
+        exerciseId: 'squat',
+        exerciseName: 'Squat',
+        sets: [
+          _set(100, 5),
+          _set(120, 5).copyWith(isCompleted: false),
+        ],
+      );
+      expect(log.completedSets.length, 1);
+      expect(log.maxWeight, 100);
+      expect(log.totalVolume, 500);
+    });
+  });
+
+  group('Minuteur de repos', () {
+    test('le temps restant ne devient jamais négatif', () {
+      final now = DateTime(2026, 10, 11, 20);
+      final rest = ActiveRest(
+        endsAt: now.add(const Duration(seconds: 30)),
+        totalSeconds: 90,
+        exerciseName: 'Squat',
+      );
+      expect(rest.remainingAt(now), const Duration(seconds: 30));
+      expect(rest.isRunningAt(now), isTrue);
+      expect(rest.remainingAt(now.add(const Duration(minutes: 5))), Duration.zero);
+      expect(rest.isRunningAt(now.add(const Duration(minutes: 5))), isFalse);
+    });
+
+    test('durée par exercice, insensible à la casse, sinon durée par défaut', () {
+      final settings = const RestSettings(defaultSeconds: 90).withExerciseSeconds('Squat', 180);
+      expect(settings.secondsFor('squat'), 180);
+      expect(settings.secondsFor('Curl'), 90);
+    });
+
+    test('les réglages survivent à un aller-retour JSON', () {
+      final settings = const RestSettings(autoStart: false, defaultSeconds: 75)
+          .withExerciseSeconds('Développé couché', 150);
+      final restored = RestSettings.fromJson(settings.toJson());
+      expect(restored.autoStart, isFalse);
+      expect(restored.defaultSeconds, 75);
+      expect(restored.secondsFor('développé couché'), 150);
     });
   });
 

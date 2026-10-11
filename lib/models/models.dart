@@ -9,3 +9,5 @@ export 'user_streak.dart';
 export 'global_exercise.dart';
 export 'session_exercise_ref.dart';
 export 'personal_record.dart';
+export 'active_rest.dart';
+export 'rest_settings.dart';

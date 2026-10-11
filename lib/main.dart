@@ -14,16 +14,19 @@ Future<void> main() async {
   // Stockage local (Hive) : doit être prêt avant le premier écran.
   await StorageService().init();
 
+  // Alertes de fin de repos (vibration même écran verrouillé).
+  await RestAlarmService().init();
+
   // Noms des jours et des mois en français.
   await initializeDateFormatting('fr_FR', null);
 
-  // Barres système claires, assorties au fond « craie ».
+  // Barres système sombres, assorties au thème.
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
-    statusBarIconBrightness: Brightness.dark,
-    statusBarBrightness: Brightness.light,
+    statusBarIconBrightness: Brightness.light,
+    statusBarBrightness: Brightness.dark,
     systemNavigationBarColor: AppColors.surface,
-    systemNavigationBarIconBrightness: Brightness.dark,
+    systemNavigationBarIconBrightness: Brightness.light,
   ));
 
   runApp(const AppNuno());
@@ -43,7 +46,7 @@ class AppNuno extends StatelessWidget {
       child: MaterialApp(
         title: 'AppNuno',
         debugShowCheckedModeBanner: false,
-        theme: AppTheme.light,
+        theme: AppTheme.dark,
         home: const HomeScreen(),
       ),
     );

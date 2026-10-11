@@ -9,6 +9,7 @@ class StorageService {
   static const String _scheduleBox = 'weekly_schedule';
   static const String _streakBox = 'user_streak';
   static const String _activeWorkoutBox = 'active_workout';
+  static const String _settingsBox = 'settings';
 
   late Box<Map> _globalExercisesBoxInstance;
   late Box<Map> _sessionsBoxInstance;
@@ -16,6 +17,7 @@ class StorageService {
   late Box<Map> _scheduleBoxInstance;
   late Box<Map> _streakBoxInstance;
   late Box<Map> _activeWorkoutBoxInstance;
+  late Box<Map> _settingsBoxInstance;
 
   final _uuid = const Uuid();
 
@@ -33,6 +35,7 @@ class StorageService {
     _scheduleBoxInstance = await Hive.openBox<Map>(_scheduleBox);
     _streakBoxInstance = await Hive.openBox<Map>(_streakBox);
     _activeWorkoutBoxInstance = await Hive.openBox<Map>(_activeWorkoutBox);
+    _settingsBoxInstance = await Hive.openBox<Map>(_settingsBox);
   }
 
   String generateId() => _uuid.v4();
@@ -139,7 +142,7 @@ class StorageService {
     for (var key in _completedWorkoutsBoxInstance.keys) {
       final data = _completedWorkoutsBoxInstance.get(key);
       if (data != null) {
-        workouts.add(CompletedWorkout.fromJson(_convertMap(data)));
+        workouts.add(_asHistory(CompletedWorkout.fromJson(_convertMap(data))));
       }
     }
     workouts.sort((a, b) => b.date.compareTo(a.date));
@@ -159,9 +162,21 @@ class StorageService {
   Future<CompletedWorkout?> getCompletedWorkout(String id) async {
     final data = _completedWorkoutsBoxInstance.get(id);
     if (data != null) {
-      return CompletedWorkout.fromJson(_convertMap(data));
+      return _asHistory(CompletedWorkout.fromJson(_convertMap(data)));
     }
     return null;
+  }
+
+  /// Dans l'historique, toute série enregistrée a été réalisée.
+  ///
+  /// Les séries non validées sont retirées en fin de séance ; on marque les
+  /// autres comme validées pour rester compatible avec les données
+  /// enregistrées par d'anciennes versions de l'application.
+  CompletedWorkout _asHistory(CompletedWorkout workout) {
+    for (final log in workout.exerciseLogs) {
+      log.sets = [for (final set in log.sets) set.copyWith(isCompleted: true)];
+    }
+    return workout;
   }
 
   Future<void> saveCompletedWorkout(CompletedWorkout workout) async {
@@ -263,14 +278,15 @@ class StorageService {
   /// Clé unique sous laquelle la séance en cours est conservée.
   static const String _activeWorkoutKey = 'current';
 
-  /// Sauvegarde l'état de la séance en cours (séries saisies et exercice affiché).
+  /// Sauvegarde l'état de la séance en cours : séries (prévues et validées)
+  /// et minuteur de repos éventuel.
   ///
   /// Appelée après chaque modification afin qu'aucune donnée ne soit perdue
   /// si le système ferme l'application pendant l'entraînement.
-  Future<void> saveActiveWorkout(CompletedWorkout workout, int currentExerciseIndex) async {
+  Future<void> saveActiveWorkout(CompletedWorkout workout, {ActiveRest? rest}) async {
     await _activeWorkoutBoxInstance.put(_activeWorkoutKey, {
       'workout': workout.toJson(),
-      'currentExerciseIndex': currentExerciseIndex,
+      if (rest != null) 'rest': rest.toJson(),
     });
   }
 
@@ -278,15 +294,16 @@ class StorageService {
   ///
   /// Une donnée illisible (format obsolète, écriture interrompue) est supprimée
   /// plutôt que de bloquer le démarrage de l'application.
-  ({CompletedWorkout workout, int currentExerciseIndex})? getActiveWorkout() {
+  ({CompletedWorkout workout, ActiveRest? rest})? getActiveWorkout() {
     final data = _activeWorkoutBoxInstance.get(_activeWorkoutKey);
     if (data == null) return null;
 
     try {
       final map = _convertMap(data);
+      final rest = map['rest'] as Map<String, dynamic>?;
       return (
         workout: CompletedWorkout.fromJson(map['workout'] as Map<String, dynamic>),
-        currentExerciseIndex: map['currentExerciseIndex'] as int? ?? 0,
+        rest: rest == null ? null : ActiveRest.fromJson(rest),
       );
     } catch (_) {
       _activeWorkoutBoxInstance.delete(_activeWorkoutKey);
@@ -297,5 +314,23 @@ class StorageService {
   /// Supprime la séance en cours une fois celle-ci terminée ou abandonnée.
   Future<void> clearActiveWorkout() async {
     await _activeWorkoutBoxInstance.delete(_activeWorkoutKey);
+  }
+
+  // =====================
+  // RÉGLAGES
+  // =====================
+
+  RestSettings getRestSettings() {
+    final data = _settingsBoxInstance.get('rest');
+    if (data == null) return const RestSettings();
+    try {
+      return RestSettings.fromJson(_convertMap(data));
+    } catch (_) {
+      return const RestSettings();
+    }
+  }
+
+  Future<void> saveRestSettings(RestSettings settings) async {
+    await _settingsBoxInstance.put('rest', settings.toJson());
   }
 }

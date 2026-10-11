@@ -20,7 +20,7 @@ class Panel extends StatelessWidget {
     this.onTap,
     this.onLongPress,
     this.color = AppColors.surface,
-    this.borderColor = AppColors.line,
+    this.borderColor = Colors.transparent,
   });
 
   @override

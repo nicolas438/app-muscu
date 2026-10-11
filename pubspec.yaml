@@ -26,6 +26,13 @@ dependencies:
   
   flutter_lucide: ^1.6.0
 
+  # Alerte de fin de repos (notification programmée qui vibre)
+  flutter_local_notifications: ^20.1.0
+  timezone: ^0.10.0
+
+  # Partage de la carte de bilan
+  share_plus: ^12.0.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -28,24 +28,33 @@ class ExerciseLog {
     );
   }
 
-  double get totalVolume => sets.fold(0, (sum, set) => sum + set.volume);
+  /// Séries validées (cochées). Pendant une séance, la liste [sets] contient
+  /// aussi les séries prévues mais pas encore réalisées.
+  List<ExerciseSet> get completedSets => sets.where((s) => s.isCompleted).toList();
 
-  double get maxWeight => sets.isEmpty ? 0 : sets.map((s) => s.weight).reduce((a, b) => a > b ? a : b);
+  double get totalVolume => completedSets.fold(0, (sum, set) => sum + set.volume);
 
-  int get totalReps => sets.fold(0, (sum, set) => sum + set.reps);
+  double get maxWeight {
+    final done = completedSets;
+    if (done.isEmpty) return 0;
+    return done.map((s) => s.weight).reduce((a, b) => a > b ? a : b);
+  }
 
-  /// Meilleure série de l'exercice, au sens du 1RM estimé.
+  int get totalReps => completedSets.fold(0, (sum, set) => sum + set.reps);
+
+  /// Meilleure série validée de l'exercice, au sens du 1RM estimé.
   ///
   /// C'est la série de travail la plus représentative : elle n'est pas
   /// faussée par une série d'échauffement ou une série dégressive.
   ExerciseSet? get bestSet {
-    if (sets.isEmpty) return null;
-    return sets.reduce(
+    final done = completedSets;
+    if (done.isEmpty) return null;
+    return done.reduce(
       (best, set) => set.estimatedOneRepMax > best.estimatedOneRepMax ? set : best,
     );
   }
 
-  /// 1RM estimé de la meilleure série (0 si aucune série).
+  /// 1RM estimé de la meilleure série (0 si aucune série validée).
   double get bestEstimatedOneRepMax => bestSet?.estimatedOneRepMax ?? 0;
 
   ExerciseLog copyWith({

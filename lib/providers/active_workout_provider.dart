@@ -11,250 +11,368 @@ enum ActiveWorkoutStatus {
   completed,
 }
 
-/// Gère la séance en cours : exercices, séries saisies et navigation.
+/// Gère la séance en cours : exercices, séries prévues et validées,
+/// et minuteur de repos entre les séries.
 ///
 /// Chaque modification est immédiatement enregistrée dans le stockage local,
 /// ce qui permet de reprendre la séance si l'application est fermée
 /// (mise en arrière-plan prolongée, appel, batterie vide…).
 class ActiveWorkoutProvider with ChangeNotifier {
+  /// Nombre de séries prévues pour un exercice jamais réalisé.
+  static const int defaultPlannedSets = 3;
+
   final StorageService _storage = StorageService();
+  final RestAlarmService _alarm = RestAlarmService();
 
   CompletedWorkout? _currentWorkout;
-  int _currentExerciseIndex = 0;
   ActiveWorkoutStatus _status = ActiveWorkoutStatus.notStarted;
-  DateTime? _workoutStartTime;
+  ActiveRest? _rest;
+  RestSettings _restSettings = const RestSettings();
 
-  // Getters
+  // ===========================================================================
+  // ACCESSEURS
+  // ===========================================================================
+
   CompletedWorkout? get currentWorkout => _currentWorkout;
-  int get currentExerciseIndex => _currentExerciseIndex;
   ActiveWorkoutStatus get status => _status;
-  DateTime? get workoutStartTime => _workoutStartTime;
-
   bool get hasActiveWorkout => _status == ActiveWorkoutStatus.inProgress;
 
-  ExerciseLog? get currentExerciseLog {
-    if (_currentWorkout == null) return null;
-    if (_currentExerciseIndex >= _currentWorkout!.exerciseLogs.length) return null;
-    return _currentWorkout!.exerciseLogs[_currentExerciseIndex];
-  }
+  /// Repos en cours, ou `null` si aucun minuteur n'est lancé.
+  ActiveRest? get rest => _rest;
+
+  RestSettings get restSettings => _restSettings;
 
   Duration get elapsedTime {
-    if (_workoutStartTime == null) return Duration.zero;
-    return DateTime.now().difference(_workoutStartTime!);
+    final workout = _currentWorkout;
+    if (workout == null) return Duration.zero;
+    return DateTime.now().difference(workout.startTime);
   }
 
-  /// Restaure une séance interrompue lors d'une précédente exécution.
-  ///
-  /// À appeler au démarrage, après l'initialisation du stockage.
-  void restoreActiveWorkout() {
-    final saved = _storage.getActiveWorkout();
-    if (saved == null) return;
+  // ===========================================================================
+  // CYCLE DE VIE DE LA SÉANCE
+  // ===========================================================================
 
-    final workout = saved.workout;
-    _currentWorkout = workout;
-    _currentExerciseIndex = workout.exerciseLogs.isEmpty
-        ? 0
-        : saved.currentExerciseIndex.clamp(0, workout.exerciseLogs.length - 1);
-    _status = ActiveWorkoutStatus.inProgress;
-    _workoutStartTime = workout.startTime;
+  /// Charge les réglages et restaure une séance interrompue lors d'une
+  /// précédente exécution. À appeler au démarrage, après l'initialisation
+  /// du stockage.
+  void restoreActiveWorkout() {
+    _restSettings = _storage.getRestSettings();
+
+    final saved = _storage.getActiveWorkout();
+    if (saved != null) {
+      _currentWorkout = saved.workout;
+      _status = ActiveWorkoutStatus.inProgress;
+      // Un repos terminé pendant que l'application était fermée est ignoré.
+      final rest = saved.rest;
+      _rest = (rest != null && rest.isRunningAt(DateTime.now())) ? rest : null;
+    }
     notifyListeners();
   }
 
-  // Start a new workout
+  /// Démarre une séance : chaque exercice reçoit autant de séries prévues
+  /// que lors de sa dernière réalisation (trois par défaut).
   void startWorkout(WorkoutSession session, WorkoutProvider workoutProvider) {
-    final workoutId = _storage.generateId();
     final now = DateTime.now();
+    final refs = List.of(session.exerciseRefs)..sort((a, b) => a.order.compareTo(b.order));
 
-    // Get global exercises from refs
-    final exerciseLogs = session.exerciseRefs.map((ref) {
-      final globalExercise = workoutProvider.getGlobalExerciseById(ref.exerciseId);
-      if (globalExercise == null) return null;
+    final exerciseLogs = <ExerciseLog>[];
+    for (final ref in refs) {
+      final exercise = workoutProvider.getGlobalExerciseById(ref.exerciseId);
+      if (exercise == null) continue;
 
-      // Create an Exercise from GlobalExercise
-      final exercise = Exercise(
-        id: globalExercise.id,
-        name: globalExercise.name,
-        order: ref.order,
-      );
-      return ExerciseLog.fromExercise(_storage.generateId(), exercise);
-    }).whereType<ExerciseLog>().toList();
+      final previous = workoutProvider.getPreviousSetsForExercise(exercise.name);
+      exerciseLogs.add(ExerciseLog(
+        id: _storage.generateId(),
+        exerciseId: exercise.id,
+        exerciseName: exercise.name,
+        sets: _plannedSets(previous.isEmpty ? defaultPlannedSets : previous.length),
+      ));
+    }
 
     _currentWorkout = CompletedWorkout(
-      id: workoutId,
+      id: _storage.generateId(),
       sessionId: session.id,
       sessionName: session.name,
       date: now,
       startTime: now,
       exerciseLogs: exerciseLogs,
     );
-
-    _currentExerciseIndex = 0;
     _status = ActiveWorkoutStatus.inProgress;
-    _workoutStartTime = now;
+    _rest = null;
+    unawaited(_alarm.cancel());
 
     _persist();
     notifyListeners();
   }
 
-  // Add a set to current exercise
-  void addSet({
-    required double weight,
-    required int reps,
-    String? notes,
-  }) {
-    if (_currentWorkout == null || currentExerciseLog == null) return;
-
-    final setId = _storage.generateId();
-    final setNumber = currentExerciseLog!.sets.length + 1;
-
-    final newSet = ExerciseSet(
-      id: setId,
-      weight: weight,
-      reps: reps,
-      setNumber: setNumber,
-      isCompleted: true,
-      notes: notes,
-    );
-
-    currentExerciseLog!.sets.add(newSet);
-    _persist();
-    notifyListeners();
-  }
-
-  // Update a set
-  void updateSet(int setIndex, {double? weight, int? reps, String? notes}) {
-    if (currentExerciseLog == null) return;
-    if (setIndex >= currentExerciseLog!.sets.length) return;
-
-    final currentSet = currentExerciseLog!.sets[setIndex];
-    currentExerciseLog!.sets[setIndex] = currentSet.copyWith(
-      weight: weight,
-      reps: reps,
-      notes: notes,
-    );
-
-    _persist();
-    notifyListeners();
-  }
-
-  // Delete a set
-  void deleteSet(int setIndex) {
-    if (currentExerciseLog == null) return;
-    if (setIndex >= currentExerciseLog!.sets.length) return;
-
-    currentExerciseLog!.sets.removeAt(setIndex);
-
-    // Renumber remaining sets
-    for (var i = 0; i < currentExerciseLog!.sets.length; i++) {
-      currentExerciseLog!.sets[i] = currentExerciseLog!.sets[i].copyWith(
-        setNumber: i + 1,
-      );
-    }
-
-    _persist();
-    notifyListeners();
-  }
-
-  /// Ajoute un exercice hors séance et l'affiche directement.
+  /// Termine la séance et l'enregistre dans l'historique.
   ///
-  /// L'exercice est placé en fin de liste ; on bascule dessus pour que
-  /// l'utilisateur puisse saisir ses séries sans naviguer manuellement.
-  void addOffSessionExercise(String exerciseName) {
-    if (_currentWorkout == null) return;
-
-    final exerciseId = _storage.generateId();
-
-    final offSessionLog = ExerciseLog(
-      id: exerciseId,
-      exerciseId: exerciseId,
-      exerciseName: exerciseName,
-      sets: [], // No sets initially - user will add them manually
-      isOffSession: true,
-    );
-
-    _currentWorkout!.exerciseLogs.add(offSessionLog);
-    _currentExerciseIndex = _currentWorkout!.exerciseLogs.length - 1;
-    _persist();
-    notifyListeners();
-  }
-
-  // Navigate exercises
-  void nextExercise() {
-    if (_currentWorkout == null) return;
-    if (_currentExerciseIndex < _currentWorkout!.exerciseLogs.length - 1) {
-      _currentExerciseIndex++;
-      _persist();
-      notifyListeners();
-    }
-  }
-
-  void previousExercise() {
-    if (_currentExerciseIndex > 0) {
-      _currentExerciseIndex--;
-      _persist();
-      notifyListeners();
-    }
-  }
-
-  void goToExercise(int index) {
-    if (_currentWorkout == null) return;
-    if (index >= 0 && index < _currentWorkout!.exerciseLogs.length) {
-      _currentExerciseIndex = index;
-      _persist();
-      notifyListeners();
-    }
-  }
-
-  // Complete workout
+  /// Les séries prévues mais non validées sont retirées, ainsi que les
+  /// exercices restés sans aucune série validée.
   Future<CompletedWorkout?> completeWorkout({String? notes}) async {
-    if (_currentWorkout == null) return null;
+    final workout = _currentWorkout;
+    if (workout == null) return null;
 
-    _currentWorkout = _currentWorkout!.copyWith(
+    final logs = <ExerciseLog>[];
+    for (final log in workout.exerciseLogs) {
+      final done = log.completedSets;
+      if (done.isEmpty) continue;
+      logs.add(log.copyWith(sets: [
+        for (var i = 0; i < done.length; i++) done[i].copyWith(setNumber: i + 1),
+      ]));
+    }
+
+    final completed = workout.copyWith(
       endTime: DateTime.now(),
       notes: notes,
+      exerciseLogs: logs,
     );
 
+    _currentWorkout = completed;
     _status = ActiveWorkoutStatus.completed;
+    _rest = null;
 
-    // Save to storage
-    await _storage.saveCompletedWorkout(_currentWorkout!);
-
+    await _alarm.cancel();
+    await _storage.saveCompletedWorkout(completed);
     // La séance fait désormais partie de l'historique : elle ne doit plus
     // être proposée à la reprise au prochain lancement.
     await _storage.clearActiveWorkout();
 
-    final completedWorkout = _currentWorkout;
-
     notifyListeners();
-
-    return completedWorkout;
+    return completed;
   }
 
-  // Cancel workout
-  void cancelWorkout() {
-    _clearState();
-    unawaited(_storage.clearActiveWorkout());
-    notifyListeners();
-  }
+  /// Abandonne la séance en cours sans l'enregistrer.
+  void cancelWorkout() => _clear();
 
-  // Reset after completing
-  void reset() {
-    _clearState();
-    unawaited(_storage.clearActiveWorkout());
-    notifyListeners();
-  }
+  /// Libère la séance une fois terminée et enregistrée.
+  void reset() => _clear();
 
-  /// Réinitialise l'état en mémoire (sans toucher au stockage).
-  void _clearState() {
+  void _clear() {
     _currentWorkout = null;
-    _currentExerciseIndex = 0;
     _status = ActiveWorkoutStatus.notStarted;
-    _workoutStartTime = null;
+    _rest = null;
+    unawaited(_alarm.cancel());
+    unawaited(_storage.clearActiveWorkout());
+    notifyListeners();
   }
+
+  // ===========================================================================
+  // SÉRIES
+  // ===========================================================================
+
+  ExerciseLog? _log(int logIndex) {
+    final logs = _currentWorkout?.exerciseLogs;
+    if (logs == null || logIndex < 0 || logIndex >= logs.length) return null;
+    return logs[logIndex];
+  }
+
+  /// Met à jour la charge ou les répétitions saisies sur une série.
+  ///
+  /// Appelée à chaque frappe : l'état est enregistré sans reconstruire
+  /// l'écran, le champ de saisie affichant déjà la valeur.
+  void updateSet(int logIndex, int setIndex, {double? weight, int? reps}) {
+    final log = _log(logIndex);
+    if (log == null || setIndex < 0 || setIndex >= log.sets.length) return;
+
+    log.sets[setIndex] = log.sets[setIndex].copyWith(weight: weight, reps: reps);
+    _persist();
+  }
+
+  /// Valide (ou dé-valide) une série avec la charge et les répétitions
+  /// réellement effectuées. La validation lance le minuteur de repos si
+  /// l'option est activée.
+  void setCompleted(
+    int logIndex,
+    int setIndex, {
+    required bool completed,
+    double? weight,
+    int? reps,
+  }) {
+    final log = _log(logIndex);
+    if (log == null || setIndex < 0 || setIndex >= log.sets.length) return;
+
+    log.sets[setIndex] = log.sets[setIndex].copyWith(
+      weight: weight,
+      reps: reps,
+      isCompleted: completed,
+    );
+
+    if (completed && _restSettings.autoStart) {
+      startRest(log.exerciseName);
+    } else {
+      _persist();
+      notifyListeners();
+    }
+  }
+
+  /// Ajoute une série prévue à un exercice, pré-remplie avec les valeurs
+  /// de la série précédente.
+  void addSet(int logIndex) {
+    final log = _log(logIndex);
+    if (log == null) return;
+
+    final last = log.sets.isEmpty ? null : log.sets.last;
+    log.sets.add(ExerciseSet(
+      id: _storage.generateId(),
+      weight: last?.weight ?? 0,
+      reps: last?.reps ?? 0,
+      setNumber: log.sets.length + 1,
+    ));
+
+    _persist();
+    notifyListeners();
+  }
+
+  /// Supprime une série et renumérote les suivantes.
+  void deleteSet(int logIndex, int setIndex) {
+    final log = _log(logIndex);
+    if (log == null || setIndex < 0 || setIndex >= log.sets.length) return;
+
+    log.sets.removeAt(setIndex);
+    for (var i = 0; i < log.sets.length; i++) {
+      log.sets[i] = log.sets[i].copyWith(setNumber: i + 1);
+    }
+
+    _persist();
+    notifyListeners();
+  }
+
+  /// Ajoute un exercice hors séance, en fin de liste.
+  ///
+  /// Il est préparé comme les autres à partir de sa dernière réalisation.
+  void addOffSessionExercise(String exerciseName, WorkoutProvider workoutProvider) {
+    final workout = _currentWorkout;
+    if (workout == null) return;
+
+    final previous = workoutProvider.getPreviousSetsForExercise(exerciseName);
+    final id = _storage.generateId();
+    workout.exerciseLogs.add(ExerciseLog(
+      id: id,
+      exerciseId: id,
+      exerciseName: exerciseName,
+      sets: _plannedSets(previous.isEmpty ? 1 : previous.length),
+      isOffSession: true,
+    ));
+
+    _persist();
+    notifyListeners();
+  }
+
+  /// Retire un exercice de la séance en cours.
+  void removeExercise(int logIndex) {
+    final workout = _currentWorkout;
+    if (workout == null || _log(logIndex) == null) return;
+
+    workout.exerciseLogs.removeAt(logIndex);
+    _persist();
+    notifyListeners();
+  }
+
+  /// Séries prévues, vides : les valeurs de la séance précédente
+  /// s'affichent en indication tant que rien n'est saisi.
+  List<ExerciseSet> _plannedSets(int count) {
+    return [
+      for (var i = 0; i < count; i++)
+        ExerciseSet(id: _storage.generateId(), weight: 0, reps: 0, setNumber: i + 1),
+    ];
+  }
+
+  // ===========================================================================
+  // MINUTEUR DE REPOS
+  // ===========================================================================
+
+  /// Lance le repos après une série de [exerciseName], avec la durée
+  /// réglée pour cet exercice, et programme l'alerte de fin.
+  void startRest(String exerciseName) {
+    final seconds = _restSettings.secondsFor(exerciseName);
+    _rest = ActiveRest(
+      endsAt: DateTime.now().add(Duration(seconds: seconds)),
+      totalSeconds: seconds,
+      exerciseName: exerciseName,
+    );
+
+    unawaited(_scheduleAlarm(_rest!));
+    _persist();
+    notifyListeners();
+  }
+
+  /// Allonge ou raccourcit le repos en cours de [deltaSeconds] secondes.
+  void adjustRest(int deltaSeconds) {
+    final rest = _rest;
+    if (rest == null) return;
+
+    final endsAt = rest.endsAt.add(Duration(seconds: deltaSeconds));
+    if (!endsAt.isAfter(DateTime.now())) {
+      skipRest();
+      return;
+    }
+
+    _rest = rest.copyWith(
+      endsAt: endsAt,
+      totalSeconds: (rest.totalSeconds + deltaSeconds).clamp(1, 3600).toInt(),
+    );
+    unawaited(_scheduleAlarm(_rest!));
+    _persist();
+    notifyListeners();
+  }
+
+  /// Interrompt le repos et annule l'alerte.
+  void skipRest() {
+    if (_rest == null) return;
+    _rest = null;
+    unawaited(_alarm.cancel());
+    _persist();
+    notifyListeners();
+  }
+
+  /// Appelée par l'écran quand le compte à rebours atteint zéro : l'alerte
+  /// système se déclenche d'elle-même, il suffit d'effacer le repos.
+  void onRestElapsed() {
+    if (_rest == null) return;
+    _rest = null;
+    _persist();
+    notifyListeners();
+  }
+
+  Future<void> _scheduleAlarm(ActiveRest rest) async {
+    await _alarm.requestPermissions();
+    await _alarm.schedule(rest);
+  }
+
+  // ===========================================================================
+  // RÉGLAGES DU REPOS
+  // ===========================================================================
+
+  /// Règle la durée de repos propre à un exercice.
+  Future<void> setRestSecondsFor(String exerciseName, int seconds) async {
+    _restSettings = _restSettings.withExerciseSeconds(exerciseName, seconds);
+    notifyListeners();
+    await _storage.saveRestSettings(_restSettings);
+  }
+
+  /// Règle la durée de repos par défaut.
+  Future<void> setDefaultRestSeconds(int seconds) async {
+    _restSettings = _restSettings.copyWith(defaultSeconds: seconds);
+    notifyListeners();
+    await _storage.saveRestSettings(_restSettings);
+  }
+
+  /// Active ou désactive le lancement automatique du repos.
+  Future<void> setAutoStartRest(bool enabled) async {
+    _restSettings = _restSettings.copyWith(autoStart: enabled);
+    notifyListeners();
+    await _storage.saveRestSettings(_restSettings);
+  }
+
+  // ===========================================================================
+  // PERSISTANCE
+  // ===========================================================================
 
   /// Enregistre la séance en cours sans bloquer l'interface.
   void _persist() {
-    if (_currentWorkout == null || _status != ActiveWorkoutStatus.inProgress) return;
-    unawaited(_storage.saveActiveWorkout(_currentWorkout!, _currentExerciseIndex));
+    final workout = _currentWorkout;
+    if (workout == null || _status != ActiveWorkoutStatus.inProgress) return;
+    unawaited(_storage.saveActiveWorkout(workout, rest: _rest));
   }
 }

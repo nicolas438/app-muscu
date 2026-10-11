@@ -72,7 +72,7 @@ class _PRSequenceModalState extends State<PRSequenceModal> {
                   onPressed: _next,
                   style: FilledButton.styleFrom(
                     backgroundColor: Colors.white,
-                    foregroundColor: AppColors.ink,
+                    foregroundColor: AppColors.background,
                   ),
                   child: Text(_index < total - 1 ? 'Record suivant' : 'Continuer'),
                 ),

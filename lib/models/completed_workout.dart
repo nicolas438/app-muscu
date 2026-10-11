@@ -28,7 +28,8 @@ class CompletedWorkout {
 
   double get totalVolume => exerciseLogs.fold(0, (sum, log) => sum + log.totalVolume);
 
-  int get totalSets => exerciseLogs.fold(0, (sum, log) => sum + log.sets.length);
+  /// Nombre de séries validées.
+  int get totalSets => exerciseLogs.fold(0, (sum, log) => sum + log.completedSets.length);
 
   int get totalReps => exerciseLogs.fold(0, (sum, log) => sum + log.totalReps);
 

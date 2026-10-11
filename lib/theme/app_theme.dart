@@ -1,42 +1,50 @@
 import 'package:flutter/material.dart';
 
-/// Palette « Craie & disques ».
+/// Palette « Fonte & disques », thème sombre.
 ///
-/// Le fond rappelle la magnésie, l'encre le fer des barres, et les accents
-/// reprennent le code couleur officiel des disques de compétition :
-/// rouge 25 kg, bleu 20 kg, jaune 15 kg, vert 10 kg.
+/// Le fond rappelle la fonte des barres et des haltères, le texte la craie,
+/// et les accents reprennent le code couleur officiel des disques de
+/// compétition (rouge 25 kg, bleu 20 kg, jaune 15 kg, vert 10 kg, blanc 5 kg),
+/// éclaircis pour rester lisibles sur fond sombre.
 /// Chaque accent a un rôle unique dans l'interface :
 /// - bleu : actions principales ;
 /// - rouge : records personnels ;
-/// - jaune : objectif hebdomadaire (flammes) ;
+/// - jaune : objectif hebdomadaire (flammes) et temps de repos ;
 /// - vert : séries validées, progression.
 class AppColors {
   AppColors._();
 
-  // Fonds et surfaces
-  static const Color chalk = Color(0xFFF2F2EE);
-  static const Color surface = Color(0xFFFFFFFF);
-  static const Color surfaceMuted = Color(0xFFE9E9E3);
-  static const Color line = Color(0xFFDEDED7);
+  // Fonds et surfaces, du plus profond au plus en relief
+  static const Color background = Color(0xFF101215);
+  static const Color surface = Color(0xFF181B1F);
+  static const Color surfaceRaised = Color(0xFF22262B);
+  static const Color line = Color(0xFF2B3036);
 
-  // Encre (textes et éléments structurants)
-  static const Color ink = Color(0xFF1A1D21);
-  static const Color inkSoft = Color(0xFF5A6068);
-  static const Color inkFaint = Color(0xFF979CA3);
+  // Textes
+  static const Color text = Color(0xFFF1F1EC);
+  static const Color textSoft = Color(0xFFA0A6AD);
+  static const Color textFaint = Color(0xFF6B7178);
+
+  /// Fond des éléments sélectionnés (puces, segments) : couleur craie,
+  /// avec [onInverse] pour le texte posé dessus.
+  static const Color inverse = text;
+  static const Color onInverse = background;
 
   // Couleurs des disques
-  static const Color plateRed = Color(0xFFD63A2F);
-  static const Color plateBlue = Color(0xFF2453C8);
-  static const Color plateYellow = Color(0xFFF2B21B);
-  static const Color plateGreen = Color(0xFF23965A);
-  static const Color plateGrey = Color(0xFF7A808A);
+  static const Color plateRed = Color(0xFFFF4D3D);
+  static const Color plateBlue = Color(0xFF3D6BFF);
+  static const Color plateYellow = Color(0xFFFFC233);
+  static const Color plateGreen = Color(0xFF2FBF71);
+  static const Color plateGrey = Color(0xFF8A9099);
+  static const Color plateWhite = Color(0xFFF1F1EC);
 
   // Rôles
   static const Color primary = plateBlue;
   static const Color record = plateRed;
   static const Color flame = plateYellow;
+  static const Color rest = plateYellow;
   static const Color success = plateGreen;
-  static const Color error = Color(0xFFB3261E);
+  static const Color error = Color(0xFFFF5449);
 
   /// Couleurs proposées pour identifier une séance.
   static const List<Color> sessionColors = [
@@ -45,7 +53,7 @@ class AppColors {
     plateYellow,
     plateGreen,
     plateGrey,
-    ink,
+    plateWhite,
   ];
 
   /// Couleur d'une séance à partir de l'index enregistré.
@@ -58,7 +66,7 @@ class AppColors {
 
   /// Couleur lisible pour un texte ou une icône posé sur [background].
   static Color onColor(Color background) {
-    return background.computeLuminance() > 0.45 ? ink : Colors.white;
+    return background.computeLuminance() > 0.45 ? AppColors.background : Colors.white;
   }
 }
 
@@ -99,14 +107,14 @@ class AppText {
   static const String _condensed = 'BarlowCondensed';
   static const List<FontFeature> _tabular = [FontFeature.tabularFigures()];
 
-  /// Très grands chiffres : saisie de la charge et des répétitions.
+  /// Très grands chiffres : compte à rebours, records.
   static const TextStyle figureXL = TextStyle(
     fontFamily: _condensed,
     fontWeight: FontWeight.w800,
     fontSize: 64,
     height: 1.0,
     letterSpacing: -1,
-    color: AppColors.ink,
+    color: AppColors.text,
     fontFeatures: _tabular,
   );
 
@@ -117,7 +125,7 @@ class AppText {
     fontSize: 36,
     height: 1.0,
     letterSpacing: -0.5,
-    color: AppColors.ink,
+    color: AppColors.text,
     fontFeatures: _tabular,
   );
 
@@ -127,7 +135,7 @@ class AppText {
     fontWeight: FontWeight.w700,
     fontSize: 22,
     height: 1.1,
-    color: AppColors.ink,
+    color: AppColors.text,
     fontFeatures: _tabular,
   );
 
@@ -138,7 +146,7 @@ class AppText {
     fontSize: 34,
     height: 1.05,
     letterSpacing: -0.3,
-    color: AppColors.ink,
+    color: AppColors.text,
   );
 
   /// Titre de bloc ou de carte importante.
@@ -147,7 +155,7 @@ class AppText {
     fontWeight: FontWeight.w700,
     fontSize: 20,
     height: 1.2,
-    color: AppColors.ink,
+    color: AppColors.text,
   );
 
   /// Intitulé de section ou d'élément de liste.
@@ -156,7 +164,7 @@ class AppText {
     fontWeight: FontWeight.w600,
     fontSize: 16,
     height: 1.25,
-    color: AppColors.ink,
+    color: AppColors.text,
   );
 
   /// Texte courant.
@@ -165,7 +173,7 @@ class AppText {
     fontWeight: FontWeight.w400,
     fontSize: 15,
     height: 1.4,
-    color: AppColors.ink,
+    color: AppColors.text,
   );
 
   /// Libellé secondaire (sous-titres, métadonnées).
@@ -174,7 +182,7 @@ class AppText {
     fontWeight: FontWeight.w500,
     fontSize: 13,
     height: 1.3,
-    color: AppColors.inkSoft,
+    color: AppColors.textSoft,
   );
 
   /// Petit texte d'appoint (unités, dates).
@@ -183,7 +191,7 @@ class AppText {
     fontWeight: FontWeight.w500,
     fontSize: 12,
     height: 1.3,
-    color: AppColors.inkFaint,
+    color: AppColors.textFaint,
   );
 }
 
@@ -191,32 +199,32 @@ class AppText {
 class AppTheme {
   AppTheme._();
 
-  static ThemeData get light {
+  static ThemeData get dark {
     final buttonShape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.m));
     const buttonText = TextStyle(fontFamily: 'Barlow', fontWeight: FontWeight.w600, fontSize: 16);
 
     return ThemeData(
       useMaterial3: true,
-      brightness: Brightness.light,
+      brightness: Brightness.dark,
       fontFamily: 'Barlow',
-      scaffoldBackgroundColor: AppColors.chalk,
+      scaffoldBackgroundColor: AppColors.background,
       colorScheme: const ColorScheme(
-        brightness: Brightness.light,
+        brightness: Brightness.dark,
         primary: AppColors.primary,
         onPrimary: Colors.white,
-        secondary: AppColors.ink,
-        onSecondary: Colors.white,
+        secondary: AppColors.text,
+        onSecondary: AppColors.background,
         error: AppColors.error,
         onError: Colors.white,
         surface: AppColors.surface,
-        onSurface: AppColors.ink,
-        onSurfaceVariant: AppColors.inkSoft,
+        onSurface: AppColors.text,
+        onSurfaceVariant: AppColors.textSoft,
         outline: AppColors.line,
         outlineVariant: AppColors.line,
       ),
       appBarTheme: const AppBarTheme(
-        backgroundColor: AppColors.chalk,
-        foregroundColor: AppColors.ink,
+        backgroundColor: AppColors.background,
+        foregroundColor: AppColors.text,
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: false,
@@ -226,6 +234,8 @@ class AppTheme {
         style: FilledButton.styleFrom(
           backgroundColor: AppColors.primary,
           foregroundColor: Colors.white,
+          disabledBackgroundColor: AppColors.surfaceRaised,
+          disabledForegroundColor: AppColors.textFaint,
           minimumSize: const Size(64, 52),
           padding: const EdgeInsets.symmetric(horizontal: AppSpace.xl),
           shape: buttonShape,
@@ -244,7 +254,7 @@ class AppTheme {
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: AppColors.ink,
+          foregroundColor: AppColors.text,
           side: const BorderSide(color: AppColors.line, width: 1.5),
           minimumSize: const Size(64, 52),
           padding: const EdgeInsets.symmetric(horizontal: AppSpace.xl),
@@ -258,19 +268,22 @@ class AppTheme {
           textStyle: buttonText,
         ),
       ),
+      iconButtonTheme: IconButtonThemeData(
+        style: IconButton.styleFrom(foregroundColor: AppColors.text),
+      ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: AppColors.surface,
+        fillColor: AppColors.surfaceRaised,
         contentPadding: const EdgeInsets.symmetric(horizontal: AppSpace.l, vertical: AppSpace.l),
-        hintStyle: AppText.body.copyWith(color: AppColors.inkFaint),
-        labelStyle: AppText.body.copyWith(color: AppColors.inkSoft),
+        hintStyle: AppText.body.copyWith(color: AppColors.textFaint),
+        labelStyle: AppText.body.copyWith(color: AppColors.textSoft),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppRadius.m),
-          borderSide: const BorderSide(color: AppColors.line),
+          borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppRadius.m),
-          borderSide: const BorderSide(color: AppColors.line),
+          borderSide: BorderSide.none,
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppRadius.m),
@@ -281,15 +294,19 @@ class AppTheme {
           borderSide: const BorderSide(color: AppColors.error),
         ),
       ),
+      textSelectionTheme: const TextSelectionThemeData(
+        cursorColor: AppColors.primary,
+        selectionHandleColor: AppColors.primary,
+      ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: AppColors.surface,
         surfaceTintColor: Colors.transparent,
-        indicatorColor: AppColors.chalk,
+        indicatorColor: AppColors.surfaceRaised,
         height: 68,
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           final selected = states.contains(WidgetState.selected);
           return AppText.caption.copyWith(
-            color: selected ? AppColors.ink : AppColors.inkFaint,
+            color: selected ? AppColors.text : AppColors.textFaint,
             fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
           );
         }),
@@ -297,14 +314,14 @@ class AppTheme {
           final selected = states.contains(WidgetState.selected);
           return IconThemeData(
             size: 22,
-            color: selected ? AppColors.ink : AppColors.inkFaint,
+            color: selected ? AppColors.text : AppColors.textFaint,
           );
         }),
       ),
       dividerTheme: const DividerThemeData(color: AppColors.line, thickness: 1, space: 1),
       snackBarTheme: SnackBarThemeData(
-        backgroundColor: AppColors.ink,
-        contentTextStyle: AppText.body.copyWith(color: Colors.white),
+        backgroundColor: AppColors.inverse,
+        contentTextStyle: AppText.body.copyWith(color: AppColors.onInverse),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.m)),
       ),
@@ -313,7 +330,7 @@ class AppTheme {
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.l)),
         titleTextStyle: AppText.title,
-        contentTextStyle: AppText.body.copyWith(color: AppColors.inkSoft),
+        contentTextStyle: AppText.body.copyWith(color: AppColors.textSoft),
       ),
       bottomSheetTheme: const BottomSheetThemeData(
         backgroundColor: AppColors.surface,
@@ -324,12 +341,24 @@ class AppTheme {
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
       ),
+      listTileTheme: const ListTileThemeData(
+        iconColor: AppColors.textSoft,
+        textColor: AppColors.text,
+      ),
       progressIndicatorTheme: const ProgressIndicatorThemeData(color: AppColors.primary),
       checkboxTheme: CheckboxThemeData(
         fillColor: WidgetStateProperty.resolveWith(
           (states) => states.contains(WidgetState.selected) ? AppColors.primary : null,
         ),
+        side: const BorderSide(color: AppColors.textFaint, width: 1.5),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
+      ),
+      tooltipTheme: TooltipThemeData(
+        decoration: BoxDecoration(
+          color: AppColors.inverse,
+          borderRadius: BorderRadius.circular(AppRadius.s),
+        ),
+        textStyle: AppText.caption.copyWith(color: AppColors.onInverse),
       ),
     );
   }

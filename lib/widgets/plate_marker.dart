@@ -7,7 +7,15 @@ class PlateMarker extends StatelessWidget {
   final Color color;
   final double size;
 
-  const PlateMarker({super.key, required this.color, this.size = 14});
+  /// Couleur du trou central : celle du fond sur lequel la pastille est posée.
+  final Color holeColor;
+
+  const PlateMarker({
+    super.key,
+    required this.color,
+    this.size = 14,
+    this.holeColor = AppColors.surface,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -19,7 +27,7 @@ class PlateMarker extends StatelessWidget {
       child: Container(
         width: size * 0.32,
         height: size * 0.32,
-        decoration: const BoxDecoration(color: AppColors.surface, shape: BoxShape.circle),
+        decoration: BoxDecoration(color: holeColor, shape: BoxShape.circle),
       ),
     );
   }

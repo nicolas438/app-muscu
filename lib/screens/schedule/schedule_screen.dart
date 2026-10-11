@@ -93,7 +93,7 @@ class ScheduleScreen extends StatelessWidget {
                     padding: const EdgeInsets.fromLTRB(AppSpace.m, 0, AppSpace.m, AppSpace.l),
                     children: [
                       _SessionOption(
-                        leading: const Icon(LucideIcons.moon, size: 20, color: AppColors.inkSoft),
+                        leading: const Icon(LucideIcons.moon, size: 20, color: AppColors.textSoft),
                         title: 'Repos',
                         selected: current == null,
                         onTap: () => choose(null),
@@ -111,7 +111,7 @@ class ScheduleScreen extends StatelessWidget {
                           padding: const EdgeInsets.all(AppSpace.l),
                           child: Text(
                             'Crée d\'abord une séance dans l\'onglet Séances.',
-                            style: AppText.body.copyWith(color: AppColors.inkSoft),
+                            style: AppText.body.copyWith(color: AppColors.textSoft),
                           ),
                         ),
                     ],
@@ -183,7 +183,7 @@ class _DayRow extends StatelessWidget {
                       ],
                     ),
             ),
-            const Icon(LucideIcons.chevron_right, size: 18, color: AppColors.inkFaint),
+            const Icon(LucideIcons.chevron_right, size: 18, color: AppColors.textFaint),
           ],
         ),
       ),
@@ -215,7 +215,7 @@ class _SessionOption extends StatelessWidget {
       subtitle: subtitle == null ? null : Text(subtitle!, style: AppText.caption),
       trailing: selected ? const Icon(LucideIcons.check, color: AppColors.primary) : null,
       selected: selected,
-      selectedTileColor: AppColors.chalk,
+      selectedTileColor: AppColors.surfaceRaised,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.s)),
     );
   }

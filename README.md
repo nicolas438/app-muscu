@@ -10,10 +10,16 @@ fonctionne sans connexion, y compris à la salle.
   composées à partir de cette bibliothèque (ordre modifiable, couleur au choix).
 - **Planning** : une séance ou du repos pour chaque jour de la semaine ; la séance
   du jour s'affiche sur l'accueil. N'importe quelle séance peut être lancée à tout moment.
-- **Entraînement** : saisie charge × répétitions avec de larges boutons − / +,
-  rappel de la meilleure série de la dernière séance, exercices hors séance.
-  La séance en cours est sauvegardée en continu : elle peut être mise en pause et
-  reprise, même après la fermeture de l'application.
+- **Entraînement** : chaque exercice affiche le tableau de ses séries, avec les
+  valeurs de la séance précédente ; on coche une série pour la valider (un champ
+  laissé vide reprend la valeur précédente). Séries et exercices s'ajoutent ou se
+  retirent à la volée. La séance est sauvegardée en continu : elle peut être mise
+  en pause et reprise, même après la fermeture de l'application.
+- **Minuteur de repos** : lancé automatiquement à chaque série cochée, réglable
+  par exercice, ajustable de ±15 s. À la fin, le téléphone vibre et sonne grâce à
+  une notification programmée, même écran verrouillé.
+- **Carte de bilan** : en fin de séance, un récapitulatif (durée, volume, records,
+  meilleures séries) à partager en image.
 - **Records** : détectés en fin de séance sur la charge maximale et sur le 1RM
   estimé (formule d'Epley), pour valoriser aussi les répétitions gagnées.
 - **Objectif hebdomadaire** : nombre de séances visé par semaine ; chaque semaine
@@ -56,6 +62,15 @@ lib/
 ```
 
 La direction graphique est décrite dans [DESIGN.md](DESIGN.md).
+
+## Notifications
+
+L'alerte de fin de repos utilise `flutter_local_notifications`. Sur Android,
+l'autorisation d'afficher des notifications est demandée au premier repos, et
+l'alarme exacte s'appuie sur la permission `USE_EXACT_ALARM` (Android 13 et plus).
+Cette permission convient à une installation directe de l'APK ; une publication sur
+le Play Store demanderait de passer par `SCHEDULE_EXACT_ALARM` et une demande
+explicite à l'utilisateur.
 
 ## Crédits
 
